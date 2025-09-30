@@ -56,6 +56,30 @@ static bool IntersectNodeRecursive(const Node& node, const Ray& ray, HitInfo& hI
 }
 
 
+// Check whether need to cast or not
+static bool CastShadowRecursive(const Node& node, const Ray& ray, float t_max, int hitSide, float eps)
+{
+	Ray rayLocal = node.ToNodeCoords(ray);
+	const Object* obj = node.GetNodeObj();
+	HitInfo hCurrent;
+	hCurrent.Init();
+
+	if (obj && obj->IntersectRay(rayLocal, hCurrent, hitSide))
+	{
+		if (hCurrent.z > eps && hCurrent.z < (t_max - eps))
+			return true;
+	}
+
+	for (int i = 0; i < node.GetNumChild(); ++i)
+	{
+		if (CastShadowRecursive(*node.GetChild(i), rayLocal, t_max, hitSide, eps))
+			return true;
+	}
+
+	return false;
+}
+
+
 
 //-------------------------------------------------------------------------------
 // Renderer
@@ -71,6 +95,22 @@ static inline void ConstructCameraBasis(const Camera& camera, Vec3f& camRight, V
 
 
 
+// ShadeInfo class
+class MyShadeInfo : public ShadeInfo
+{
+public:
+	MyShadeInfo(const Renderer* renderer, const std::vector<Light*>& lights) : ShadeInfo(lights), rendererPtr(renderer) {}
+
+	float TraceShadowRay(const Ray& ray, float t_max = BIGFLOAT) const override
+	{
+		return rendererPtr->TraceShadowRay(ray, t_max, HIT_FRONT_AND_BACK) ? 0.0f : 1.0f;		// hit = 0.0f, not hit = 1.0f
+	}
+
+private:
+	const Renderer* rendererPtr;
+};
+
+
 // Renderer class
 class MyRenderer : public Renderer
 {
@@ -78,7 +118,7 @@ public:
 	void BeginRender() override;
 	void StopRender() override;
 	bool TraceRay(Ray const& ray, HitInfo& hInfo, int hitSide) const override;
-	//bool TraceShadowRay(Ray const& ray, float t_max, int hitSide) const override;
+	bool TraceShadowRay(Ray const& ray, float t_max, int hitSide) const override;
 
 private:
 	// threading state
@@ -95,6 +135,20 @@ bool MyRenderer::TraceRay(Ray const& ray, HitInfo& hInfo, int hitSide) const
 	bool hit = IntersectNodeRecursive(scene.rootNode, ray, hInfo, hitSide);		// Call recursive function to get intersection
 
 	return hit;
+}
+
+
+bool MyRenderer::TraceShadowRay(Ray const& ray, float t_max, int hitSide) const
+{
+	// Offset avoid self-shadowing
+	constexpr float kEps = 1e-4f;
+	Ray rayShadow = ray;
+	Vec3f dir = ray.dir;
+	dir.Normalize();
+	rayShadow.p += dir * kEps;
+
+	// Recursive to test occlusion
+	return CastShadowRecursive(scene.rootNode, rayShadow, t_max, hitSide, kEps);
 }
 
 
@@ -187,7 +241,7 @@ void MyRenderer::BeginRender()
 								// Get material
 								const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
 
-								ShadeInfo shadeInfo(scene.lights);
+								MyShadeInfo shadeInfo(this, scene.lights);
 								shadeInfo.SetPixel(x, y);
 
 								// shade hitInfo

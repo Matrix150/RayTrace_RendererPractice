@@ -25,6 +25,8 @@
     <ClInclude Include="3rdparty\cyVector.h" />
     <ClInclude Include="3rdparty\lodepng.h" />
     <ClInclude Include="3rdparty\tinyxml2.h" />
+    <ClInclude Include="header\lights.h" />
+    <ClInclude Include="header\materials.h" />
     <ClInclude Include="header\objects.h" />
     <ClInclude Include="header\renderer.h" />
     <ClInclude Include="header\scene.h" />

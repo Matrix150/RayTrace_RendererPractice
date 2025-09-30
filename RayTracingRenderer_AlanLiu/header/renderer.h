@@ -2,7 +2,7 @@
 ///
 /// \file       renderer.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    2.1
+/// \version    3.1
 /// \date       September 24, 2025
 ///
 /// \brief Project source for CS 6620 - University of Utah.
@@ -102,6 +102,10 @@ public:
 	virtual int          NumLights()       const { return (int)lights.size(); }	// returns the number of lights to be used during shading
 	virtual Light const* GetLight( int i ) const { return lights[i]; }			// returns the i^th light
 
+	// Traces a shadow ray and returns the visibility
+	virtual float TraceShadowRay( Ray   const &ray, float t_max=BIGFLOAT ) const { return 1.0f; }
+	virtual float TraceShadowRay( Vec3f const &dir, float t_max=BIGFLOAT ) const { return TraceShadowRay(Ray(P(),dir),t_max); }
+
 	void SetPixel( int x, int y ) { pixelX = x; pixelY = y; }
 
 	void SetHit( Ray const &r, HitInfo const &h )
@@ -148,7 +152,8 @@ public:
 	virtual void StopRender () {}	// Stops the current rendering process. It should wait till rendering threads stop.
 	bool IsRendering() const { return isRendering; }
 
-	virtual bool TraceRay( Ray const &ray, HitInfo &hInfo, int hitSide=HIT_FRONT_AND_BACK ) const { return false; }
+	virtual bool TraceRay      ( Ray const &ray, HitInfo &hInfo, int hitSide=HIT_FRONT_AND_BACK ) const { return false; }
+	virtual bool TraceShadowRay( Ray const &ray, float t_max,    int hitSide=HIT_FRONT_AND_BACK ) const { return false; }
 };
 
 //-------------------------------------------------------------------------------

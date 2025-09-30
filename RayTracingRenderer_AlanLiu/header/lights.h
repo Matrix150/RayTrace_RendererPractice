@@ -2,7 +2,7 @@
 ///
 /// \file       lights.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    2.0
+/// \version    3.0
 /// \date       September 19, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
@@ -40,7 +40,7 @@ protected:
 class DirectLight : public GenLight
 {
 public:
-	Color Illuminate( ShadeInfo const &sInfo, Vec3f &dir ) const override { dir=-direction; return intensity; }
+	Color Illuminate( ShadeInfo const &sInfo, Vec3f &dir ) const override { dir=-direction; return intensity*sInfo.TraceShadowRay(-direction); }
 	void SetViewportLight( int lightID ) const override { SetViewportParam(lightID,ColorA(0.0f),ColorA(intensity),Vec4f(-direction,0.0f)); }
 	void Load( Loader const &loader ) override;
 protected:
@@ -53,7 +53,7 @@ protected:
 class PointLight : public GenLight
 {
 public:
-	Color Illuminate( ShadeInfo const &sInfo, Vec3f &dir ) const override { Vec3f d=position-sInfo.P(); dir=d.GetNormalized(); return intensity; }
+	Color Illuminate( ShadeInfo const &sInfo, Vec3f &dir ) const override { Vec3f d=position-sInfo.P(); dir=d.GetNormalized(); return intensity*sInfo.TraceShadowRay(d,1); }
 	void SetViewportLight( int lightID ) const override { SetViewportParam(lightID,ColorA(0.0f),ColorA(intensity),Vec4f(position,1.0f)); }
 	void Load( Loader const &loader ) override;
 protected:
