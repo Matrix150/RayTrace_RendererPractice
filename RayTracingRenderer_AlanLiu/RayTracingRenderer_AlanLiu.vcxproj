@@ -18,6 +18,25 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="3rdparty\cyColor.h" />
+    <ClInclude Include="3rdparty\cyCore.h" />
+    <ClInclude Include="3rdparty\cyMatrix.h" />
+    <ClInclude Include="3rdparty\cyVector.h" />
+    <ClInclude Include="3rdparty\lodepng.h" />
+    <ClInclude Include="3rdparty\tinyxml2.h" />
+    <ClInclude Include="header\objects.h" />
+    <ClInclude Include="header\renderer.h" />
+    <ClInclude Include="header\scene.h" />
+    <ClInclude Include="header\xmlload.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="3rdparty\lodepng.cpp" />
+    <ClCompile Include="3rdparty\tinyxml2.cpp" />
+    <ClCompile Include="source\main.cpp" />
+    <ClCompile Include="source\viewport.cpp" />
+    <ClCompile Include="source\xmlload.cpp" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -102,11 +121,17 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(ProjectDir)3rdparty\freeglut\include;$(ProjectDir)3rdparty;$(ProjectDir)header;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)3rdparty\freeglut\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>freeglut.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y /I "$(ProjectDir)3rdparty\freeglut\bin\x64\freeglut.dll" "$(OutDir)\"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -116,11 +141,17 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(ProjectDir)3rdparty\freeglut\include;$(ProjectDir)3rdparty;$(ProjectDir)header;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(ProjectDir)3rdparty\freeglut\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>freeglut.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y /I "$(ProjectDir)3rdparty\freeglut\bin\x64\freeglut.dll" "$(OutDir)\"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
