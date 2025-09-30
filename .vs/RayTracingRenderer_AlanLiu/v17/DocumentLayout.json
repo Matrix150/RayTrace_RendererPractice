@@ -3,6 +3,14 @@
   "WorkspaceRootPath": "C:\\Users\\u1336636\\Desktop\\RayTrace_RendererPractice\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{D292700D-54DB-4389-9A51-1BA32676DAC5}|RayTracingRenderer_AlanLiu\\RayTracingRenderer_AlanLiu.vcxproj|C:\\Users\\u1336636\\Desktop\\RayTrace_RendererPractice\\RayTracingRenderer_AlanLiu\\renderer.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{D292700D-54DB-4389-9A51-1BA32676DAC5}|RayTracingRenderer_AlanLiu\\RayTracingRenderer_AlanLiu.vcxproj|solutionrelative:RayTracingRenderer_AlanLiu\\renderer.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{D292700D-54DB-4389-9A51-1BA32676DAC5}|RayTracingRenderer_AlanLiu\\RayTracingRenderer_AlanLiu.vcxproj|C:\\Users\\u1336636\\Desktop\\RayTrace_RendererPractice\\RayTracingRenderer_AlanLiu\\objetcs.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{D292700D-54DB-4389-9A51-1BA32676DAC5}|RayTracingRenderer_AlanLiu\\RayTracingRenderer_AlanLiu.vcxproj|solutionrelative:RayTracingRenderer_AlanLiu\\objetcs.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{D292700D-54DB-4389-9A51-1BA32676DAC5}|RayTracingRenderer_AlanLiu\\RayTracingRenderer_AlanLiu.vcxproj|C:\\Users\\u1336636\\Desktop\\RayTrace_RendererPractice\\RayTracingRenderer_AlanLiu\\source\\main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
       "RelativeMoniker": "D:0:0:{D292700D-54DB-4389-9A51-1BA32676DAC5}|RayTracingRenderer_AlanLiu\\RayTracingRenderer_AlanLiu.vcxproj|solutionrelative:RayTracingRenderer_AlanLiu\\source\\main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
     }
@@ -19,12 +27,38 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
+              "Title": "renderer.cpp",
+              "DocumentMoniker": "C:\\Users\\u1336636\\Desktop\\RayTrace_RendererPractice\\RayTracingRenderer_AlanLiu\\renderer.cpp",
+              "RelativeDocumentMoniker": "RayTracingRenderer_AlanLiu\\renderer.cpp",
+              "ToolTip": "C:\\Users\\u1336636\\Desktop\\RayTrace_RendererPractice\\RayTracingRenderer_AlanLiu\\renderer.cpp",
+              "RelativeToolTip": "RayTracingRenderer_AlanLiu\\renderer.cpp",
+              "ViewState": "AgIAAJsAAAAAAAAAAAAiwKYAAABGAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-09-30T18:14:09.217Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "objetcs.cpp",
+              "DocumentMoniker": "C:\\Users\\u1336636\\Desktop\\RayTrace_RendererPractice\\RayTracingRenderer_AlanLiu\\objetcs.cpp",
+              "RelativeDocumentMoniker": "RayTracingRenderer_AlanLiu\\objetcs.cpp",
+              "ToolTip": "C:\\Users\\u1336636\\Desktop\\RayTrace_RendererPractice\\RayTracingRenderer_AlanLiu\\objetcs.cpp",
+              "RelativeToolTip": "RayTracingRenderer_AlanLiu\\objetcs.cpp",
+              "ViewState": "AgIAABsAAAAAAAAAAAAiwDIAAAADAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2025-09-30T18:13:42.951Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
               "Title": "main.cpp",
               "DocumentMoniker": "C:\\Users\\u1336636\\Desktop\\RayTrace_RendererPractice\\RayTracingRenderer_AlanLiu\\source\\main.cpp",
               "RelativeDocumentMoniker": "RayTracingRenderer_AlanLiu\\source\\main.cpp",
               "ToolTip": "C:\\Users\\u1336636\\Desktop\\RayTrace_RendererPractice\\RayTracingRenderer_AlanLiu\\source\\main.cpp",
               "RelativeToolTip": "RayTracingRenderer_AlanLiu\\source\\main.cpp",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAACEAAAAAAAAAAAAiwDkAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
               "WhenOpened": "2025-09-30T01:46:38.191Z",
               "EditorCaption": ""

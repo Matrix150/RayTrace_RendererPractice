@@ -1,2 +1,131 @@
-﻿  RayTracingRenderer_AlanLiu.cpp
-  RayTracingRenderer_AlanLiu.vcxproj -> D:\GitHub\RayTraceRenderer_AlanLiu\x64\Debug\RayTracingRenderer_AlanLiu.exe
+﻿  lodepng.cpp
+  tinyxml2.cpp
+  objetcs.cpp
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(623,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'objetcs.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(624,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'objetcs.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(625,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'objetcs.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(626,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'objetcs.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(86,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec2<S> &)'
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(627,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'objetcs.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(87,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec3<S> &)'
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(628,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'objetcs.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(88,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec4<S> &)'
+  
+  renderer.cpp
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(623,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'renderer.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(624,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'renderer.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(625,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'renderer.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(626,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'renderer.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(86,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec2<S> &)'
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(627,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'renderer.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(87,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec3<S> &)'
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(628,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'renderer.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(88,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec4<S> &)'
+  
+  main.cpp
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(623,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/main.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(624,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/main.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(625,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/main.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(626,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/main.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(86,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec2<S> &)'
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(627,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/main.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(87,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec3<S> &)'
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(628,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/main.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(88,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec4<S> &)'
+  
+  viewport.cpp
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(623,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/viewport.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(624,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/viewport.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(625,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/viewport.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(626,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/viewport.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(86,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec2<S> &)'
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(627,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/viewport.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(87,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec3<S> &)'
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(628,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/viewport.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(88,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec4<S> &)'
+  
+  xmlload.cpp
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(623,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/xmlload.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(624,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/xmlload.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(625,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/xmlload.cpp')
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(626,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/xmlload.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(86,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec2<S> &)'
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(627,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/xmlload.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(87,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec3<S> &)'
+  
+C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(628,88): warning C4984: 'if constexpr' is a C++17 language extension
+  (compiling source file 'source/xmlload.cpp')
+      C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\cyVector.h(88,24):
+      This diagnostic occurred in the compiler generated function 'cy::Vec<T,N>::Vec(const cy::Vec4<S> &)'
+  
+  Generating Code...
+  RayTracingRenderer_AlanLiu.vcxproj -> C:\Users\u1336636\Desktop\RayTrace_RendererPractice\x64\Debug\RayTracingRenderer_AlanLiu.exe
+  C:\Users\u1336636\Desktop\RayTrace_RendererPractice\RayTracingRenderer_AlanLiu\3rdparty\freeglut\bin\x64\freeglut.dll
+  1 File(s) copied
