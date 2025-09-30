@@ -2,7 +2,7 @@
 ///
 /// \file       xmlload.cpp 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    1.0
+/// \version    2.0
 /// \date       September 19, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
@@ -17,6 +17,8 @@
 #include "renderer.h"
 #include "xmlload.h"
 #include "objects.h"
+#include "lights.h"
+#include "materials.h"
 
 //-------------------------------------------------------------------------------
 
@@ -24,7 +26,10 @@ Sphere theSphere;
 
 //-------------------------------------------------------------------------------
 
-void LoadNode( Loader loader, Node &parent );
+void LoadNode     ( Loader loader, Node         &parent );
+void LoadLight    ( Loader loader, LightList    &lights );
+void LoadMaterial ( Loader loader, MaterialList &materials );
+void SetNodeMaterials( Node *node, MaterialList &materials );
 
 //-------------------------------------------------------------------------------
 
@@ -69,11 +74,18 @@ bool Renderer::LoadScene( char const *filename )
 
 void Scene::Load( Loader const &sceneLoader )
 {
-	rootNode.Init();
+	rootNode .Init();
+	lights   .DeleteAll();
+	materials.DeleteAll();
 
 	for ( Loader loader : sceneLoader ) {
-		if ( loader == "object" ) LoadNode( loader, rootNode  );
+		if      ( loader == "object"      ) LoadNode    ( loader, rootNode );
+		else if ( loader == "light"       ) LoadLight   ( loader, lights );
+		else if ( loader == "material"    ) LoadMaterial( loader, materials );
+		else printf("WARNING: Unknown tag \"%s\"\n", static_cast<char const*>(loader.Tag()));
 	}
+
+	SetNodeMaterials( &rootNode, materials );
 }
 
 //-------------------------------------------------------------------------------
@@ -103,6 +115,12 @@ void LoadNode( Loader loader, Node &parent )
 	// name
 	char const *name = loader.Attribute("name");
 	node->SetName(name);
+
+	// material
+	char const *mtlName = loader.Attribute("material");
+	if ( mtlName ) {
+		node->SetMaterial( (Material*)mtlName );	// temporarily set the material pointer to a string of the material name
+	}
 
 	// type
 	Loader::String type = loader.Attribute("type");
@@ -142,6 +160,101 @@ void Transformation::Load( Loader const &loader )
 			Translate(t);
 		}
 	}
+}
+
+//-------------------------------------------------------------------------------
+
+void LoadLight( Loader loader, LightList &lights )
+{
+	Loader::String type = loader.Attribute("type");
+	Light *light = nullptr;
+	if      ( type == "ambient" ) light = new AmbientLight;
+	else if ( type == "direct"  ) light = new DirectLight;
+	else if ( type == "point"   ) light = new PointLight;
+	else {
+		printf("ERROR: Unknown light type %s\n", static_cast<char const*>(type));
+		return;
+	}
+
+	light->SetName(loader.Attribute("name"));
+	light->Load(loader);
+	lights.push_back(light);
+}
+
+//-------------------------------------------------------------------------------
+
+void AmbientLight::Load( Loader const &loader )
+{
+	loader.Child("intensity").ReadColor( intensity );
+}
+
+//-------------------------------------------------------------------------------
+
+void DirectLight::Load( Loader const &loader )
+{
+	loader.Child("intensity").ReadColor( intensity );
+	loader.Child("direction").ReadVec3f( direction );
+	direction.Normalize();
+}
+
+//-------------------------------------------------------------------------------
+
+void PointLight::Load( Loader const &loader )
+{
+	loader.Child("intensity").ReadColor( intensity );
+	loader.Child("position" ).ReadVec3f( position  );
+}
+
+//-------------------------------------------------------------------------------
+
+void LoadMaterial( Loader loader, MaterialList &materials )
+{
+	Material *mtl = nullptr;
+
+	Loader::String type = loader.Attribute("type");
+	if      ( type == "phong"      ) mtl = new MtlPhong;
+	else if ( type == "blinn"      ) mtl = new MtlBlinn;
+	else if ( type == "microfacet" ) mtl = new MtlMicrofacet;
+	else {
+		printf("ERROR: Unknown material type %s\n", static_cast<char const*>(type));
+		return;
+	}
+
+	mtl->SetName( loader.Attribute("name") );
+	mtl->Load( loader );
+	materials.push_back(mtl);
+}
+
+//-------------------------------------------------------------------------------
+
+void MtlBasePhongBlinn::Load( Loader const &loader )
+{
+	loader.Child("diffuse"   ).ReadColor( diffuse    );
+	loader.Child("specular"  ).ReadColor( specular   );
+	loader.Child("glossiness").ReadFloat( glossiness );
+}
+
+//-------------------------------------------------------------------------------
+
+void MtlMicrofacet::Load( Loader const &loader )
+{
+	loader.Child("color"        ).ReadColor( baseColor );
+	loader.Child("roughness"    ).ReadFloat( roughness );
+	loader.Child("metallic"     ).ReadFloat( metallic  );
+	loader.Child("ior"          ).ReadFloat( ior       );
+}
+
+//-------------------------------------------------------------------------------
+
+void SetNodeMaterials( Node *node, MaterialList &materials )
+{
+	int n = node->GetNumChild();
+	if ( node->GetMaterial() ) {
+		const char *mtlName = (const char*) node->GetMaterial();
+		Material *mtl = materials.Find( mtlName );	// mtl can be null
+		node->SetMaterial(mtl);
+	}
+	for ( int i=0; i<n; i++ ) SetNodeMaterials( node->GetChild(i), materials );
 }
 
 //-------------------------------------------------------------------------------

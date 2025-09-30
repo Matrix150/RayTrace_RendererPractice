@@ -48,7 +48,7 @@ bool Sphere::IntersectRay(Ray const& ray, HitInfo& hInfo, int hitSide) const
 	hInfo.Init();
 	hInfo.p = p;
 	hInfo.z = t;
-	//hInfo.N = N;
+	hInfo.N = N;
 	hInfo.front = front;
 
 	return true;

@@ -2,7 +2,7 @@
 ///
 /// \file       viewport.cpp 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    1.1
+/// \version    2.1
 /// \date       September 24, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
@@ -23,6 +23,8 @@
 
 #include "renderer.h"
 #include "objects.h"
+#include "lights.h"
+#include "materials.h"
 
 #ifdef USE_GLUT
 # ifdef __APPLE__
@@ -88,6 +90,9 @@ static MouseMode mouseMode = MOUSEMODE_NONE;	// Mouse mode
 static int       startTime;						// Start time of rendering
 static GLuint    viewTexture;
 static bool      closeWhenDone;
+static GLint     maxLights;
+
+MtlBlinn defaultMaterial;
 
 #define terminal_clear()      printf("\033[H\033[J")
 #define terminal_goto(x,y)    printf("\033[%d;%dH", (y), (x))
@@ -148,6 +153,7 @@ void ShowViewport( Renderer *renderer, bool beginRendering )
 	float zero[] = {0,0,0,0};
 	glLightModelfv( GL_LIGHT_MODEL_AMBIENT, zero );
 	glLightModeli( GL_LIGHT_MODEL_LOCAL_VIEWER, 1 );
+	glGetIntegerv(GL_MAX_LIGHTS, &maxLights);
 
 	glEnable(GL_NORMALIZE);
 
@@ -189,20 +195,21 @@ void GlutReshape( int w, int h )
 	}
 }
 
-
 //-------------------------------------------------------------------------------
 
 void DrawNode( Node const *node )
 {
 	glPushMatrix();
 
-	glColor3f(1,1,1);
+	const Material *mtl = node->GetMaterial();
+	if ( !mtl ) mtl = &defaultMaterial;
+	mtl->SetViewportMaterial();
 
 	Matrix4f m(node->GetTransform());
 	glMultMatrixf( m.cell );
 
 	const Object *obj = node->GetNodeObj();
-	if ( obj ) obj->ViewportDisplay();
+	if ( obj ) obj->ViewportDisplay(mtl);
 
 	for ( int i=0; i<node->GetNumChild(); i++ ) {
 		DrawNode( node->GetChild(i) );
@@ -228,6 +235,7 @@ void DrawScene( bool flipped=false )
 		glFrontFace(GL_CW);
 	}
 
+	glEnable( GL_LIGHTING );
 	glEnable( GL_DEPTH_TEST );
 
 	glPushMatrix();
@@ -235,6 +243,27 @@ void DrawScene( bool flipped=false )
 	Vec3f t = camera.pos + camera.dir;
 	Vec3f u = camera.up;
 	gluLookAt( p.x, p.y, p.z,  t.x, t.y, t.z,  u.x, u.y, u.z );
+
+	int nLights = 1;
+	if ( scene.lights.size() > 0 ) {
+		nLights = Min( (int)scene.lights.size(), maxLights );
+		for ( int i=0; i<nLights; i++ ) {
+			scene.lights[i]->SetViewportLight(i);
+		}
+	} else {
+		// Default lighting for scenes without a light
+		float white[] = {1,1,1,1};
+		float black[] = {0,0,0,0};
+		Vec4f p(camera.pos, 1);
+		glEnable ( GL_LIGHT0 );
+		glLightfv( GL_LIGHT0, GL_AMBIENT,  black );
+		glLightfv( GL_LIGHT0, GL_DIFFUSE,  white );
+		glLightfv( GL_LIGHT0, GL_SPECULAR, white );
+		glLightfv( GL_LIGHT0, GL_POSITION, &p.x );
+	}
+	for ( int i=nLights; i<maxLights; i++ ) {
+		glDisable ( GL_LIGHT0 + i );
+	}
 
 	DrawNode( &scene.rootNode );
 
@@ -248,6 +277,7 @@ void DrawScene( bool flipped=false )
 	}
 
 	glDisable( GL_DEPTH_TEST );
+	glDisable( GL_LIGHTING );
 }
 
 //-------------------------------------------------------------------------------
@@ -526,13 +556,57 @@ void BeginRendering( int value )
 //-------------------------------------------------------------------------------
 // Viewport Methods for various classes
 //-------------------------------------------------------------------------------
-void Sphere::ViewportDisplay() const
+void Sphere::ViewportDisplay( Material const *mtl ) const
 {
 	static GLUquadric *q = nullptr;
 	if ( q == nullptr ) {
 		q = gluNewQuadric();
 	}
 	gluSphere(q,1,50,50);
+}
+void GenLight::SetViewportParam( int lightID, ColorA const &ambient, ColorA const &intensity, Vec4f const &pos ) const
+{
+	glEnable ( GL_LIGHT0 + lightID );
+	glLightfv( GL_LIGHT0 + lightID, GL_AMBIENT,  &ambient.r );
+	glLightfv( GL_LIGHT0 + lightID, GL_DIFFUSE,  &intensity.r );
+	glLightfv( GL_LIGHT0 + lightID, GL_SPECULAR, &intensity.r );
+	glLightfv( GL_LIGHT0 + lightID, GL_POSITION, &pos.x );
+}
+void MtlPhong::SetViewportMaterial( int subMtlID ) const
+{
+	ColorA d(diffuse);
+	ColorA s(specular);
+	float g = glossiness;
+	glMaterialfv( GL_FRONT, GL_AMBIENT_AND_DIFFUSE, &d.r );
+	glMaterialfv( GL_FRONT, GL_SPECULAR, &s.r );
+	glMaterialf ( GL_FRONT, GL_SHININESS, g*2 );
+}
+void MtlBlinn::SetViewportMaterial( int subMtlID ) const
+{
+	ColorA d(diffuse);
+	ColorA s(specular);
+	float g = glossiness;
+	glMaterialfv( GL_FRONT, GL_AMBIENT_AND_DIFFUSE, &d.r );
+	glMaterialfv( GL_FRONT, GL_SPECULAR, &s.r );
+	glMaterialf ( GL_FRONT, GL_SHININESS, g );
+}
+void MtlMicrofacet::SetViewportMaterial( int subMtlID ) const
+{
+	const Color bc    = baseColor;
+	const float rough = roughness;
+	const float metal = metallic;
+	float ff = (ior-1)/(ior+1);
+	float f0d = ff*ff;
+	Color f0 = (1 - metal)*f0d + metal*bc;
+	float a = rough * rough;
+	float k = a / 2;
+	float D = 1 / ( Pi<float>() * a*a );
+	float t = a*(3 - 2*rough);
+	ColorA d( bc*( (1-metal)*(1-f0) + metal*t*0.25f )/Pi<float>() );
+	ColorA s( f0*D/4 );
+	glMaterialfv( GL_FRONT, GL_AMBIENT_AND_DIFFUSE, &d.r );
+	glMaterialfv( GL_FRONT, GL_SPECULAR, &s.r );
+	glMaterialf ( GL_FRONT, GL_SHININESS, (1-rough)*128 );
 }
 //-------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 ///
 /// \file       scene.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    1.0
+/// \version    2.0
 /// \date       September 19, 2025
 ///
 /// \brief Project source for CS 6620 - University of Utah.
@@ -33,8 +33,16 @@ using namespace cy;
 #define BIGFLOAT std::numeric_limits<float>::max()
 
 class Object;
+class Light;
+class Material;
 class Node;
+class ShadeInfo;
 class Loader;
+
+template <class T> class ItemList;
+
+typedef ItemList<Light>    LightList;
+typedef ItemList<Material> MaterialList;
 
 //-------------------------------------------------------------------------------
 
@@ -63,6 +71,7 @@ struct HitInfo
 	Vec3f       p;		// position of the hit point
 	float       z;		// the distance from the ray center to the hit point
 	Node const *node;	// the object node that was hit
+	Vec3f       N;		// surface normal at the hit point
 	bool        front;	// true if the ray hits the front side, false if the ray hits the back side
 
 	HitInfo() { Init(); }
@@ -95,11 +104,18 @@ public:
 	Vec3f DirectionTransformTo  ( Vec3f const &p ) const { return itm.GetSubMatrix3()*p; }	// Transform a direction vector to the local coordinate system
 	Vec3f DirectionTransformFrom( Vec3f const &p ) const { return tm .GetSubMatrix3()*p; }	// Transform a direction vector from the local coordinate system
 
+	// Transforms a normal vector to the local coordinate system (same as multiplication with the inverse transpose of the transformation)
+	Vec3f NormalTransformTo( Vec3f const &dir ) const { return tm.GetSubMatrix3().TransposeMult(dir); }
+
+	// Transforms a normal vector from the local coordinate system (same as multiplication with the inverse transpose of the transformation)
+	Vec3f NormalTransformFrom( Vec3f const &dir ) const { return itm.GetSubMatrix3().TransposeMult(dir); }
+
 	// Transformations
 	Ray ToNodeCoords( Ray const &ray ) const { return Ray( TransformTo(ray.p), DirectionTransformTo(ray.dir) ); }
 	void FromNodeCoords( HitInfo &hInfo ) const
 	{
 		hInfo.p = TransformFrom(hInfo.p);
+		hInfo.N = NormalTransformFrom(hInfo.N);
 	}
 
 	void Load( Loader const &loader );
@@ -123,7 +139,28 @@ class Object : public ItemBase
 {
 public:
 	virtual bool IntersectRay( Ray const &ray, HitInfo &hInfo, int hitSide=HIT_FRONT ) const=0;
-	virtual void ViewportDisplay() const {}	// used for OpenGL display
+	virtual void ViewportDisplay( Material const *mtl ) const {}	// used for OpenGL display
+	virtual void Load( Loader const &loader ) {}
+};
+
+//-------------------------------------------------------------------------------
+
+class Light : public ItemBase
+{
+public:
+	virtual Color Illuminate( ShadeInfo const &sInfo, Vec3f &dir ) const=0;	// returns the light intensity and direction
+	virtual bool  IsAmbient () const { return false; }
+	virtual void  SetViewportLight( int lightID ) const {}	// used for OpenGL display
+	virtual void  Load( Loader const &loader ) {}
+};
+
+//-------------------------------------------------------------------------------
+
+class Material : public ItemBase
+{
+public:
+	virtual Color Shade( ShadeInfo const &shadeInfo ) const=0;	// the main method that handles shading
+	virtual void SetViewportMaterial( int mtlID=0 ) const {}	// used for OpenGL display
 	virtual void Load( Loader const &loader ) {}
 };
 
@@ -134,10 +171,11 @@ class Node : public ItemBase, public Transformation
 private:
 	std::vector<Node*> childNodes;		// Child nodes
 	Object            *obj = nullptr;	// Object reference (merely points to the object, but does not own the object, so it doesn't get deleted automatically)
+	Material          *mtl = nullptr;	// Material used for shading the object
 public:
 	virtual ~Node() { DeleteAllChildNodes(); }
 
-	void Init() { DeleteAllChildNodes(); obj=nullptr; SetName(nullptr); InitTransform(); } // Initialize the node deleting all childNodes nodes
+	void Init() { DeleteAllChildNodes(); obj=nullptr; mtl=nullptr; SetName(nullptr); InitTransform(); } // Initialize the node deleting all childNodes nodes
 
 	// Hierarchy management
 	int         GetNumChild() const       { return (int) childNodes.size(); }
@@ -150,6 +188,10 @@ public:
 	Object const* GetNodeObj() const { return obj; }
 	Object*       GetNodeObj()       { return obj; }
 	void          SetNodeObj( Object *object ) { obj = object; }
+
+	// Material management
+	Material const* GetMaterial() const { return mtl; }
+	void            SetMaterial( Material *material ) { mtl = material; }
 };
 
 //-------------------------------------------------------------------------------
@@ -176,9 +218,22 @@ public:
 
 //-------------------------------------------------------------------------------
 
+template <class T>
+class ItemList : public std::vector<T*>
+{
+public:
+	virtual ~ItemList() { DeleteAll(); }
+	void DeleteAll() { for ( T *i : *this ) if (i) delete i; this->clear(); }
+	T* Find( char const *name ) const { for ( T *i : *this ) if ( i && strcmp(name,i->GetName())==0 ) return i; return nullptr; }
+};
+
+//-------------------------------------------------------------------------------
+
 struct Scene
 {
-	Node rootNode;
+	Node         rootNode;
+	LightList    lights;
+	MaterialList materials;
 
 	void Load( Loader const &loader );
 };

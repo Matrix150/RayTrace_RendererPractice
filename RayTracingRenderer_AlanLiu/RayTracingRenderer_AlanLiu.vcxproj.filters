@@ -62,10 +62,13 @@
     <ClCompile Include="source\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="objetcs.cpp">
+    <ClCompile Include="source\objetcs.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="renderer.cpp">
+    <ClCompile Include="source\renderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="source\materials.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -33,9 +33,10 @@
   <ItemGroup>
     <ClCompile Include="3rdparty\lodepng.cpp" />
     <ClCompile Include="3rdparty\tinyxml2.cpp" />
-    <ClCompile Include="objetcs.cpp" />
-    <ClCompile Include="renderer.cpp" />
     <ClCompile Include="source\main.cpp" />
+    <ClCompile Include="source\materials.cpp" />
+    <ClCompile Include="source\objetcs.cpp" />
+    <ClCompile Include="source\renderer.cpp" />
     <ClCompile Include="source\viewport.cpp" />
     <ClCompile Include="source\xmlload.cpp" />
   </ItemGroup>

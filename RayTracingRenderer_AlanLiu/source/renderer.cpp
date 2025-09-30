@@ -1,7 +1,7 @@
 #include <thread>
 #include <algorithm>
 #include "renderer.h"
-//#include "lights.h"
+#include "lights.h"
 
 
 // Transform from Color(0, 1) to Color24 (0, 255)
@@ -183,7 +183,24 @@ void MyRenderer::BeginRender()
 							if (hit)
 							{
 								zBuffer[index] = hInfo.z;
-								pixels[index] = Color24(255, 255, 255);		// White for hit
+								//pixels[index] = Color24(255, 255, 255);		// White for hit
+								// Get material
+								const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
+
+								ShadeInfo shadeInfo(scene.lights);
+								shadeInfo.SetPixel(x, y);
+
+								// shade hitInfo
+								shadeInfo.SetHit(ray, hInfo);
+								zBuffer[index] = hInfo.z;
+								// Get shade function in materials.cpp
+								Color color(1, 1, 1);
+
+								if (material)
+								{
+									color = material->Shade(shadeInfo);
+									pixels[index] = Color24(ToByte(color.r), ToByte(color.g), ToByte(color.b));
+								}
 							}
 							else
 							{

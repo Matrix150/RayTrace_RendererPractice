@@ -2,8 +2,8 @@
 ///
 /// \file       renderer.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    1.0
-/// \date       September 19, 2025
+/// \version    2.1
+/// \date       September 24, 2025
 ///
 /// \brief Project source for CS 6620 - University of Utah.
 ///
@@ -78,6 +78,48 @@ public:
 
 	bool SaveImage ( char const *filename ) const { return lodepng::encode(filename,&img[0].r,     width,height,LCT_RGB, 8) == 0; }
 	bool SaveZImage( char const *filename ) const { return lodepng::encode(filename,&zbufferImg[0],width,height,LCT_GREY,8) == 0; }
+};
+
+//-------------------------------------------------------------------------------
+
+class ShadeInfo
+{
+public:
+	ShadeInfo( std::vector<Light*> const &lightList ) : lights(lightList) {}
+
+	virtual Vec3f P() const { return hInfo.p; }		// returns the shading position
+	virtual Vec3f V() const { return -ray.dir; }	// returns the view vector
+	virtual Vec3f N() const { return hInfo.N; }		// returns the shading normal
+
+	virtual float Depth  () const { return hInfo.z; }		// returns the distance between the shaded hit point and the ray origin
+	virtual bool  IsFront() const { return hInfo.front; }	// returns if the shading front part of the surface
+
+	virtual Node const * GetNode() const { return hInfo.node; }	// returns the node that contains the shaded point
+
+	virtual int X() const { return pixelX; }	// returns the current pixel's x coordinate
+	virtual int Y() const { return pixelY; }	// returns the current pixel's y coordinate
+
+	virtual int          NumLights()       const { return (int)lights.size(); }	// returns the number of lights to be used during shading
+	virtual Light const* GetLight( int i ) const { return lights[i]; }			// returns the i^th light
+
+	void SetPixel( int x, int y ) { pixelX = x; pixelY = y; }
+
+	void SetHit( Ray const &r, HitInfo const &h )
+	{
+		hInfo = h;
+		hInfo.z *= r.dir.Length();
+		hInfo.N.Normalize();
+		ray = r;
+		ray.dir.Normalize();
+	}
+
+protected:
+	Ray     ray;			// the ray that found this hit point
+	HitInfo hInfo;			// ht information
+	int     pixelX  = 0;	// current pixel's x coordinate
+	int     pixelY  = 0;	// current pixel's y coordinate
+
+	std::vector<Light*> const &lights;	// lights
 };
 
 //-------------------------------------------------------------------------------
