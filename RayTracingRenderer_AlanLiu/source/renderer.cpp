@@ -194,7 +194,7 @@ void MyRenderer::BeginRender()
 								shadeInfo.SetHit(ray, hInfo);
 								zBuffer[index] = hInfo.z;
 								// Get shade function in materials.cpp
-								Color color(1, 1, 1);
+								Color color(1.0f, 1.0f, 1.0f);
 
 								if (material)
 								{

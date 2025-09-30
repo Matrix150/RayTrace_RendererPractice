@@ -2,11 +2,12 @@
 #include "lights.h"
 
 
+
 Color MtlPhong::Shade(ShadeInfo const& shadeInfo) const
 {
 	const Vec3f N = shadeInfo.N().GetNormalized();		// normal
 	const Vec3f V = shadeInfo.V().GetNormalized();		// viewing
-	Color color(0, 0, 0);
+	Color color(0.0f, 0.0f, 0.0f);
 
 	const int lightNum = shadeInfo.NumLights();	// light numbers
 	// Loop all lights
@@ -49,7 +50,7 @@ Color MtlBlinn::Shade(ShadeInfo const& shadeInfo) const
 {
 	const Vec3f N = shadeInfo.N().GetNormalized();		// normal
 	const Vec3f V = shadeInfo.V().GetNormalized();		// viewing
-	Color color(0, 0, 0);
+	Color color(0.0f, 0.0f, 0.0f);
 
 	const int lightNum = shadeInfo.NumLights();	// light numbers
 	// Loop all lights
@@ -80,7 +81,7 @@ Color MtlBlinn::Shade(ShadeInfo const& shadeInfo) const
 	}
 
 	// Saturate the color
-	color = Saturate(color);
+	color.Clamp();
 
 	return color;
 }
