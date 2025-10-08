@@ -2,7 +2,7 @@
 ///
 /// \file       xmlload.cpp 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    2.0
+/// \version    4.0
 /// \date       September 19, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
@@ -232,16 +232,22 @@ void MtlBasePhongBlinn::Load( Loader const &loader )
 	loader.Child("diffuse"   ).ReadColor( diffuse    );
 	loader.Child("specular"  ).ReadColor( specular   );
 	loader.Child("glossiness").ReadFloat( glossiness );
+	loader.Child("reflection").ReadColor( reflection );
+	loader.Child("refraction").ReadColor( refraction );
+	loader.Child("refraction").ReadFloat( ior, "index" );
+	loader.Child("absorption").ReadColor( absorption );
 }
 
 //-------------------------------------------------------------------------------
 
 void MtlMicrofacet::Load( Loader const &loader )
 {
-	loader.Child("color"        ).ReadColor( baseColor );
-	loader.Child("roughness"    ).ReadFloat( roughness );
-	loader.Child("metallic"     ).ReadFloat( metallic  );
-	loader.Child("ior"          ).ReadFloat( ior       );
+	loader.Child("color"        ).ReadColor( baseColor     );
+	loader.Child("roughness"    ).ReadFloat( roughness     );
+	loader.Child("metallic"     ).ReadFloat( metallic      );
+	loader.Child("transmittance").ReadColor( transmittance );
+	loader.Child("ior"          ).ReadFloat( ior           );
+	loader.Child("absorption"   ).ReadColor( absorption    );
 }
 
 //-------------------------------------------------------------------------------

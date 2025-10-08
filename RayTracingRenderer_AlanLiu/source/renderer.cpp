@@ -95,20 +95,75 @@ static inline void ConstructCameraBasis(const Camera& camera, Vec3f& camRight, V
 
 
 
+//class Myrenderer;
+
 // ShadeInfo class
 class MyShadeInfo : public ShadeInfo
 {
 public:
-	MyShadeInfo(const Renderer* renderer, const std::vector<Light*>& lights) : ShadeInfo(lights), rendererPtr(renderer) {}
+	MyShadeInfo(const Renderer* renderer, const std::vector<Light*>& lights, int maxBounce) : ShadeInfo(lights), rendererPtr(renderer), maxSpecularBounce(maxBounce) {}
 
-	float TraceShadowRay(const Ray& ray, float t_max = BIGFLOAT) const override
+	float TraceShadowRay(const Ray& ray, float t_max = BIGFLOAT) const override;
+
+	bool CanBounce() const override
 	{
-		return rendererPtr->TraceShadowRay(ray, t_max, HIT_FRONT_AND_BACK) ? 0.0f : 1.0f;		// hit = 0.0f, not hit = 1.0f
+		return CurrentSpecularBounce() < maxSpecularBounce;
 	}
 
+	Color TraceSecondaryRay(const Ray& ray, float& dist) const override;
+
 private:
-	const Renderer* rendererPtr;
+	const Renderer* rendererPtr = nullptr;
+	int maxSpecularBounce = 5;		// Default bounces
 };
+
+
+
+float MyShadeInfo::TraceShadowRay(const Ray& ray, float t_max) const
+{
+	constexpr float kEps = 1e-4f;
+	Ray r = ray;
+	Vec3f dir = r.dir.GetNormalized();
+	r.p += dir * kEps;
+
+	return rendererPtr->TraceShadowRay(r, t_max, HIT_FRONT_AND_BACK) ? 0.0f : 1.0f;		// 0.0f if hit, 1.0f if not hit
+}
+
+Color MyShadeInfo::TraceSecondaryRay(const Ray& ray, float& dist) const
+{
+	dist = BIGFLOAT;
+	Color color(0.0f, 0.0f, 0.0f);
+
+	// Check if can bounce
+	if (!CanBounce())
+		return color;
+
+	constexpr float kEps = 1e-4f;
+	Vec3f dir = ray.dir.GetNormalized();
+	Ray raySencondary(ray.p + dir * kEps, dir);
+	HitInfo hInfo;
+	hInfo.Init();
+
+	// Secondary ray not hit
+	if (!rendererPtr->TraceRay(raySencondary, hInfo, HIT_FRONT_AND_BACK))
+		return color;
+
+	MyShadeInfo* self = const_cast<MyShadeInfo*>(this);
+	self->IncrementBounce();
+	self->SetHit(raySencondary, hInfo);
+
+	if (hInfo.front)
+		dist = hInfo.z;
+	else
+		dist = 0.0f;
+
+	const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
+	if (material)
+		color = material->Shade(*self);
+
+	return color;
+}
+
 
 
 // Renderer class
@@ -119,6 +174,8 @@ public:
 	void StopRender() override;
 	bool TraceRay(Ray const& ray, HitInfo& hInfo, int hitSide) const override;
 	bool TraceShadowRay(Ray const& ray, float t_max, int hitSide) const override;
+
+	friend class MyShadeInfo;
 
 private:
 	// threading state
@@ -197,6 +254,8 @@ void MyRenderer::BeginRender()
 	workers.clear();
 	workers.reserve(T);
 
+	constexpr int maxSpecularBounce = 5;		// Set max bounce number
+
 	for (unsigned t = 0; t < T; ++t)
 	{
 		workers.emplace_back([=]()
@@ -241,12 +300,10 @@ void MyRenderer::BeginRender()
 								// Get material
 								const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
 
-								MyShadeInfo shadeInfo(this, scene.lights);
+								MyShadeInfo shadeInfo(this, scene.lights, maxSpecularBounce);
 								shadeInfo.SetPixel(x, y);
-
 								// shade hitInfo
 								shadeInfo.SetHit(ray, hInfo);
-								zBuffer[index] = hInfo.z;
 								// Get shade function in materials.cpp
 								Color color(1.0f, 1.0f, 1.0f);
 

@@ -2,7 +2,7 @@
 ///
 /// \file       renderer.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    3.1
+/// \version    4.1
 /// \date       September 24, 2025
 ///
 /// \brief Project source for CS 6620 - University of Utah.
@@ -102,9 +102,18 @@ public:
 	virtual int          NumLights()       const { return (int)lights.size(); }	// returns the number of lights to be used during shading
 	virtual Light const* GetLight( int i ) const { return lights[i]; }			// returns the i^th light
 
+	virtual bool CanBounce() const { return false; }	// returns if an additional bounce is permitted
+	virtual int  CurrentSpecularBounce() const { return bounceS; }	// returns the current specular bounce (zero for primary rays)
+
 	// Traces a shadow ray and returns the visibility
 	virtual float TraceShadowRay( Ray   const &ray, float t_max=BIGFLOAT ) const { return 1.0f; }
 	virtual float TraceShadowRay( Vec3f const &dir, float t_max=BIGFLOAT ) const { return TraceShadowRay(Ray(P(),dir),t_max); }
+
+	// Traces a ray and returns the shaded color at the hit point.
+	// It also sets t to the distance to the hit point, if a front is found.
+	// if a back hit is found, dist should be set to zero.
+	virtual Color TraceSecondaryRay( Ray   const &ray, float &dist ) const { dist=BIGFLOAT; return Color(0,0,0); }
+	virtual Color TraceSecondaryRay( Vec3f const &dir, float &dist ) const { return TraceSecondaryRay(Ray(P(),dir),dist); }
 
 	void SetPixel( int x, int y ) { pixelX = x; pixelY = y; }
 
@@ -117,11 +126,14 @@ public:
 		ray.dir.Normalize();
 	}
 
+	void IncrementBounce() { bounceS++; }
+
 protected:
 	Ray     ray;			// the ray that found this hit point
 	HitInfo hInfo;			// ht information
 	int     pixelX  = 0;	// current pixel's x coordinate
 	int     pixelY  = 0;	// current pixel's y coordinate
+	int     bounceS = 0;	// current specular bounce
 
 	std::vector<Light*> const &lights;	// lights
 };
