@@ -2,7 +2,7 @@
 ///
 /// \file       renderer.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    4.1
+/// \version    5.0
 /// \date       September 24, 2025
 ///
 /// \brief Project source for CS 6620 - University of Utah.
@@ -87,9 +87,10 @@ class ShadeInfo
 public:
 	ShadeInfo( std::vector<Light*> const &lightList ) : lights(lightList) {}
 
-	virtual Vec3f P() const { return hInfo.p; }		// returns the shading position
-	virtual Vec3f V() const { return -ray.dir; }	// returns the view vector
-	virtual Vec3f N() const { return hInfo.N; }		// returns the shading normal
+	virtual Vec3f P () const { return hInfo.p; }	// returns the shading position
+	virtual Vec3f V () const { return -ray.dir; }	// returns the view vector
+	virtual Vec3f N () const { return hInfo.N; }	// returns the shading normal
+	virtual Vec3f GN() const { return hInfo.GN; }	// returns the geometry normal
 
 	virtual float Depth  () const { return hInfo.z; }		// returns the distance between the shaded hit point and the ray origin
 	virtual bool  IsFront() const { return hInfo.front; }	// returns if the shading front part of the surface
@@ -122,6 +123,7 @@ public:
 		hInfo = h;
 		hInfo.z *= r.dir.Length();
 		hInfo.N.Normalize();
+		hInfo.GN.Normalize();
 		ray = r;
 		ray.dir.Normalize();
 	}

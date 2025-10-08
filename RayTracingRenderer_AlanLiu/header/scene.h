@@ -2,8 +2,8 @@
 ///
 /// \file       scene.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    2.0
-/// \date       September 19, 2025
+/// \version    5.2
+/// \date       October 1, 2025
 ///
 /// \brief Project source for CS 6620 - University of Utah.
 ///
@@ -41,20 +41,18 @@ class Loader;
 
 template <class T> class ItemList;
 
+typedef ItemList<Object>   ObjFileList;
 typedef ItemList<Light>    LightList;
 typedef ItemList<Material> MaterialList;
 
 //-------------------------------------------------------------------------------
 
-class Ray
+struct Ray
 {
-public:
 	Vec3f p, dir;
 
-	Ray() {}
-	Ray( Vec3f const &_p, Vec3f const &_dir) : p(_p), dir(_dir) {}
-	Ray( Ray const &r) : p(r.p), dir(r.dir) {}
-	void Normalize() { dir.Normalize(); }
+	Ray() = default;
+	Ray( Vec3f const &_p, Vec3f const &_dir ) : p(_p), dir(_dir) {}
 };
 
 //-------------------------------------------------------------------------------
@@ -72,10 +70,69 @@ struct HitInfo
 	float       z;		// the distance from the ray center to the hit point
 	Node const *node;	// the object node that was hit
 	Vec3f       N;		// surface normal at the hit point
+	Vec3f       GN;		// geometry normal at the hit point
 	bool        front;	// true if the ray hits the front side, false if the ray hits the back side
 
 	HitInfo() { Init(); }
 	void Init() { z=BIGFLOAT; node=nullptr; front=true; }
+};
+
+//-------------------------------------------------------------------------------
+
+class Box
+{
+public:
+	Vec3f pmin, pmax;
+
+	// Constructors
+	Box() { Init(); }
+	Box( Vec3f const &_pmin, Vec3f const &_pmax ) : pmin(_pmin), pmax(_pmax) {}
+	Box( float xmin, float ymin, float zmin, float xmax, float ymax, float zmax ) : pmin(xmin,ymin,zmin), pmax(xmax,ymax,zmax) {}
+	Box( float const *dim ) : pmin(dim[0],dim[1],dim[2]), pmax(dim[3],dim[4],dim[5]) {}
+
+	// Initializes the box, such that there exists no point inside the box (i.e. it is empty).
+	void Init() { pmin.Set(BIGFLOAT,BIGFLOAT,BIGFLOAT); pmax.Set(-BIGFLOAT,-BIGFLOAT,-BIGFLOAT); }
+
+	// Returns true if the box is empty; otherwise, returns false.
+	bool IsEmpty() const { return pmin.x>pmax.x || pmin.y>pmax.y || pmin.z>pmax.z; }
+
+	// Returns one of the 8 corner point of the box in the following order:
+	// 0:(x_min,y_min,z_min), 1:(x_max,y_min,z_min)
+	// 2:(x_min,y_max,z_min), 3:(x_max,y_max,z_min)
+	// 4:(x_min,y_min,z_max), 5:(x_max,y_min,z_max)
+	// 6:(x_min,y_max,z_max), 7:(x_max,y_max,z_max)
+	Vec3f Corner( int i ) const	// 8 corners of the box
+	{
+		Vec3f p;
+		p.x = (i & 1) ? pmax.x : pmin.x;
+		p.y = (i & 2) ? pmax.y : pmin.y;
+		p.z = (i & 4) ? pmax.z : pmin.z;
+		return p;
+	}
+
+	// Enlarges the box such that it includes the given point p.
+	void operator += ( Vec3f const &p )
+	{
+		for ( int i=0; i<3; i++ ) {
+			if ( pmin[i] > p[i] ) pmin[i] = p[i];
+			if ( pmax[i] < p[i] ) pmax[i] = p[i];
+		}
+	}
+
+	// Enlarges the box such that it includes the given box b.
+	void operator += ( Box const &b )
+	{
+		for ( int i=0; i<3; i++ ) {
+			if ( pmin[i] > b.pmin[i] ) pmin[i] = b.pmin[i];
+			if ( pmax[i] < b.pmax[i] ) pmax[i] = b.pmax[i];
+		}
+	}
+
+	// Returns true if the point is inside the box; otherwise, returns false.
+	bool IsInside( Vec3f const &p ) const { for ( int i=0; i<3; i++ ) if ( pmin[i] > p[i] || pmax[i] < p[i] ) return false; return true; }
+
+	// Returns true if the ray intersects with the box for any parameter that is smaller than t_max; otherwise, returns false.
+	bool IntersectRay( Ray const &r, float t_max ) const;
 };
 
 //-------------------------------------------------------------------------------
@@ -114,8 +171,9 @@ public:
 	Ray ToNodeCoords( Ray const &ray ) const { return Ray( TransformTo(ray.p), DirectionTransformTo(ray.dir) ); }
 	void FromNodeCoords( HitInfo &hInfo ) const
 	{
-		hInfo.p = TransformFrom(hInfo.p);
-		hInfo.N = NormalTransformFrom(hInfo.N);
+		hInfo.p  = TransformFrom      ( hInfo.p  );
+		hInfo.N  = NormalTransformFrom( hInfo.N  );
+		hInfo.GN = NormalTransformFrom( hInfo.GN );
 	}
 
 	void Load( Loader const &loader );
@@ -139,6 +197,7 @@ class Object : public ItemBase
 {
 public:
 	virtual bool IntersectRay( Ray const &ray, HitInfo &hInfo, int hitSide=HIT_FRONT ) const=0;
+	virtual Box  GetBoundBox() const=0;
 	virtual void ViewportDisplay( Material const *mtl ) const {}	// used for OpenGL display
 	virtual void Load( Loader const &loader ) {}
 };
@@ -172,10 +231,11 @@ private:
 	std::vector<Node*> childNodes;		// Child nodes
 	Object            *obj = nullptr;	// Object reference (merely points to the object, but does not own the object, so it doesn't get deleted automatically)
 	Material          *mtl = nullptr;	// Material used for shading the object
+	Box                childBoundBox;	// Bounding box of the childNodes nodes, which does not include the object of this node, but includes the objects of the childNodes nodes
 public:
 	virtual ~Node() { DeleteAllChildNodes(); }
 
-	void Init() { DeleteAllChildNodes(); obj=nullptr; mtl=nullptr; SetName(nullptr); InitTransform(); } // Initialize the node deleting all childNodes nodes
+	void Init() { DeleteAllChildNodes(); obj=nullptr; mtl=nullptr; childBoundBox.Init(); SetName(nullptr); InitTransform(); } // Initialize the node deleting all childNodes nodes
 
 	// Hierarchy management
 	int         GetNumChild() const       { return (int) childNodes.size(); }
@@ -183,6 +243,19 @@ public:
 	Node*       GetChild( int i )         { return childNodes[i]; }
 	void        AppendChild( Node *node ) { childNodes.push_back(node); }
 	void        DeleteAllChildNodes()     { for ( Node *c : childNodes ) { c->DeleteAllChildNodes(); delete c; } childNodes.clear(); }
+
+	// Bounding Box
+	Box const& ComputeChildBoundBox()
+	{
+		childBoundBox.Init();
+		for ( Node *c : childNodes ) {
+			Box childBox = c->ComputeChildBoundBox();
+			if ( c->GetNodeObj() ) childBox += c->GetNodeObj()->GetBoundBox();
+			if ( ! childBox.IsEmpty() ) for ( int j=0; j<8; j++ ) childBoundBox += c->TransformFrom( childBox.Corner(j) );	// transform the box from childNodes coordinates
+		}
+		return childBoundBox;
+	}
+	Box const& GetChildBoundBox() const { return childBoundBox; }
 
 	// Object management
 	Object const* GetNodeObj() const { return obj; }
@@ -232,6 +305,7 @@ public:
 struct Scene
 {
 	Node         rootNode;
+	ObjFileList  objList;
 	LightList    lights;
 	MaterialList materials;
 

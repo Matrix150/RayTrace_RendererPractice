@@ -2,7 +2,7 @@
 ///
 /// \file       viewport.cpp 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    2.1
+/// \version    5.1
 /// \date       September 24, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
@@ -173,11 +173,14 @@ void ShowViewport( Renderer *renderer, bool beginRendering )
 
 void InitProjection()
 {
+	Scene &scene = theRenderer->GetScene();
 	Camera &camera = theRenderer->GetCamera();
 	glMatrixMode( GL_PROJECTION );
 	glLoadIdentity();
 	float r = float(camera.imgWidth) / float(camera.imgHeight);
-	gluPerspective( camera.fov, r, 0.02, 1000.0 );
+	Box const &box = scene.rootNode.GetChildBoundBox();
+	float len = (box.pmax - box.pmin).Length();
+	gluPerspective( camera.fov, r, len/100000, len );
 	glMatrixMode( GL_MODELVIEW );
 	glLoadIdentity();
 }
@@ -563,6 +566,39 @@ void Sphere::ViewportDisplay( Material const *mtl ) const
 		q = gluNewQuadric();
 	}
 	gluSphere(q,1,50,50);
+}
+void Plane::ViewportDisplay( Material const *mtl ) const
+{
+	const int resolution = 32;
+	float xyInc = 2.0f / resolution;
+	glPushMatrix();
+	glNormal3f(0,0,1);
+	glBegin(GL_QUADS);
+	float y1=-1, y2=xyInc-1, v1=0;
+	for ( int y=0; y<resolution; y++ ) {
+		float x1=-1, x2=xyInc-1;
+		for ( int x=0; x<resolution; x++ ) {
+			glVertex3f( x1, y1, 0 );
+			glVertex3f( x2, y1, 0 );
+			glVertex3f( x2, y2, 0 );
+			glVertex3f( x1, y2, 0 );
+			x1=x2; x2+=xyInc;
+		}
+		y1=y2; y2+=xyInc;
+	}
+	glEnd();
+	glPopMatrix();
+}
+void TriObj::ViewportDisplay( Material const *mtl ) const
+{
+	glBegin(GL_TRIANGLES);
+	for ( unsigned int i=0; i<NF(); i++ ) {
+		for ( int j=0; j<3; j++ ) {
+			if ( HasNormals() ) glNormal3fv( &VN( FN(i).v[j] ).x );
+			glVertex3fv( &V( F(i).v[j] ).x );
+		}
+	}
+	glEnd();
 }
 void GenLight::SetViewportParam( int lightID, ColorA const &ambient, ColorA const &intensity, Vec4f const &pos ) const
 {

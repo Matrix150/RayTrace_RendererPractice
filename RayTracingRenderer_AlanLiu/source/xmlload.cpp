@@ -2,7 +2,7 @@
 ///
 /// \file       xmlload.cpp 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    4.0
+/// \version    5.0
 /// \date       September 19, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
@@ -23,10 +23,11 @@
 //-------------------------------------------------------------------------------
 
 Sphere theSphere;
+Plane  thePlane;
 
 //-------------------------------------------------------------------------------
 
-void LoadNode     ( Loader loader, Node         &parent );
+void LoadNode     ( Loader loader, Node         &parent,    ObjFileList &objList );
 void LoadLight    ( Loader loader, LightList    &lights );
 void LoadMaterial ( Loader loader, MaterialList &materials );
 void SetNodeMaterials( Node *node, MaterialList &materials );
@@ -75,15 +76,18 @@ bool Renderer::LoadScene( char const *filename )
 void Scene::Load( Loader const &sceneLoader )
 {
 	rootNode .Init();
+	objList  .DeleteAll();
 	lights   .DeleteAll();
 	materials.DeleteAll();
 
 	for ( Loader loader : sceneLoader ) {
-		if      ( loader == "object"      ) LoadNode    ( loader, rootNode );
+		if      ( loader == "object"      ) LoadNode    ( loader, rootNode, objList );
 		else if ( loader == "light"       ) LoadLight   ( loader, lights );
 		else if ( loader == "material"    ) LoadMaterial( loader, materials );
 		else printf("WARNING: Unknown tag \"%s\"\n", static_cast<char const*>(loader.Tag()));
 	}
+
+	rootNode.ComputeChildBoundBox();
 
 	SetNodeMaterials( &rootNode, materials );
 }
@@ -107,7 +111,7 @@ void Camera::Load( Loader const &loader )
 
 //-------------------------------------------------------------------------------
 
-void LoadNode( Loader loader, Node &parent )
+void LoadNode( Loader loader, Node &parent, ObjFileList &objList )
 {
 	Node *node = new Node;
 	parent.AppendChild(node);
@@ -125,8 +129,23 @@ void LoadNode( Loader loader, Node &parent )
 	// type
 	Loader::String type = loader.Attribute("type");
 	if ( type ) {
-		if ( type == "sphere" ) node->SetNodeObj( &theSphere );
-		else printf("ERROR: Unknown object type %s\n", static_cast<char const*>(type));
+		if      ( type == "sphere" ) node->SetNodeObj( &theSphere );
+		else if ( type == "plane"  ) node->SetNodeObj( &thePlane );
+		else if ( type == "obj"    ) {
+			TriObj *tobj = (TriObj*) objList.Find(name);
+			if ( tobj == nullptr ) {	// object is not on the list, so we should load it now
+				tobj = new TriObj;
+				if ( ! tobj->Load( name ) ) {
+					printf("ERROR: Cannot load file \"%s.\"", name);
+					delete tobj;
+					tobj = nullptr;
+				} else {
+					tobj->SetName(name);
+					objList.push_back(tobj);	// add to the list
+				}
+			}
+			node->SetNodeObj( tobj );
+		} else printf("ERROR: Unknown object type %s\n", static_cast<char const*>(type));
 	}
 
 	if ( node->GetNodeObj() ) node->GetNodeObj()->Load(loader);	// loads object-specific parameters (if any)
@@ -134,7 +153,7 @@ void LoadNode( Loader loader, Node &parent )
 
 	// Load child nodes
 	for ( Loader L : loader ) {
-		if ( L == "object" ) LoadNode( L, *node );
+		if ( L == "object" ) LoadNode( L, *node, objList );
 	}
 }
 

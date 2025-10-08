@@ -22,6 +22,7 @@
     <ClInclude Include="3rdparty\cyColor.h" />
     <ClInclude Include="3rdparty\cyCore.h" />
     <ClInclude Include="3rdparty\cyMatrix.h" />
+    <ClInclude Include="3rdparty\cyTriMesh.h" />
     <ClInclude Include="3rdparty\cyVector.h" />
     <ClInclude Include="3rdparty\lodepng.h" />
     <ClInclude Include="3rdparty\tinyxml2.h" />
