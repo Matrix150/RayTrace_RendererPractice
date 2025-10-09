@@ -90,7 +90,8 @@ bool Plane::IntersectRay(Ray const& ray, HitInfo& hInfo, int hitSide) const
 
 bool TriObj::IntersectRay(Ray const& ray, HitInfo& hInfo, int hitSide) const
 {
-	bool hit = false;
+	
+	/*bool hit = false;
 	HitInfo hBest = hInfo;
 	const int faceNum = NF();
 
@@ -111,7 +112,9 @@ bool TriObj::IntersectRay(Ray const& ray, HitInfo& hInfo, int hitSide) const
 		return true;
 	}
 
-	return false;
+	return false;*/
+
+	return TraceBVHNode(ray, hInfo, hitSide, bvh.GetRootNodeID());
 }
 
 
@@ -139,7 +142,7 @@ static inline bool MollerTrumbore(Ray const& ray, const Vec3f& v0, const Vec3f& 
 		return false;
 
 	t = (e2 % s2) * invDet;
-	return (t > 0.0f);
+	return (t > eps);
 }
 
 
@@ -179,4 +182,124 @@ bool TriObj::IntersectTriangle(Ray const& ray, HitInfo& hInfo, int hitSide, unsi
 	hInfo.front = front;
 
 	return true;
+}
+
+
+static inline bool IntersectAABB(Ray const& ray, const float box[6], float& tmin_out, float& tmax_out, float tmaxLimit)
+{
+	float tmin = -BIGFLOAT, tmax = BIGFLOAT;
+
+	for (int i = 0; i < 3; ++i)		// X,Y,Z dimensions
+	{
+		const float origin = (&ray.p.x)[i];
+		const float dir = (&ray.dir.x)[i];
+
+		float invDir;
+		if (std::abs(dir) < 1e-20f)
+			invDir = (dir >= 0.0f) ? 1e20f : -1e20f;
+		else
+			invDir = 1.0f / dir;
+
+		float t0 = (box[i] - origin) * invDir;
+		float t1 = (box[i + 3] - origin) * invDir;
+		if (t0 > t1)
+			std::swap(t0, t1);		// box[xmin, ymin, zmin, xmax, ymax, zmax]
+
+		if (t0 > tmin)
+			tmin = t0;
+		if (t1 < tmax)
+			tmax = t1;
+
+		if (tmin > tmax)		// disjoin
+			return false;
+		if (tmin >= tmaxLimit)		// not the best
+			return false;
+	}
+
+	tmin_out = tmin;
+	tmax_out = tmax;
+
+	return tmax > 0.0f;
+}
+
+
+bool TriObj::TraceBVHNode(Ray const& ray, HitInfo& hInfo, int hitSide, unsigned int nodeID) const
+{
+	struct StackItem
+	{
+		unsigned int id;		// node ID
+		float tmin, tmax;		// tmin when ray enter bounding box & tmax when ray exiting bounding box
+	};
+	StackItem stack[128];
+	int sp = 0;
+
+	float raytmin, raytmax;
+	if (!IntersectAABB(ray, bvh.GetNodeBounds(nodeID), raytmin, raytmax, hInfo.z))
+		return false;
+
+	stack[sp++] = { nodeID, raytmin, raytmax };
+
+	bool hit = false;
+	HitInfo hBest = hInfo;
+
+	while (sp > 0)
+	{
+		const StackItem item = stack[--sp];
+		if (item.tmin >= hBest.z)
+			continue;		// skip when earliest entry beyond best hit
+
+		if (bvh.IsLeafNode(item.id))
+		{
+			const unsigned int count = bvh.GetNodeElementCount(item.id);
+			const unsigned int* face = bvh.GetNodeElements(item.id);
+
+			for (unsigned int i = 0; i < count; ++i)
+			{
+				HitInfo hCurrent = hBest;
+				if (IntersectTriangle(ray, hCurrent, hitSide, face[i]) && (hCurrent.z < hBest.z))
+				{
+					hBest = hCurrent;
+					hit = true;
+				}
+			}
+		}
+		else
+		{
+			unsigned int child0 = bvh.GetFirstChildNode(item.id);
+			unsigned int child1 = bvh.GetSecondChildNode(item.id);
+
+			float tmin0, tmax0, tmin1, tmax1;
+			const bool intersect0 = IntersectAABB(ray, bvh.GetNodeBounds(child0), tmin0, tmax0, hBest.z);
+			const bool intersect1 = IntersectAABB(ray, bvh.GetNodeBounds(child1), tmin1, tmax1, hBest.z);
+
+			if (intersect0 && intersect1)
+			{
+				if (tmin0 > tmin1)
+				{
+					std::swap(tmin0, tmin1);
+					std::swap(tmax0, tmax1);
+					std::swap(child0, child1);
+				}
+
+				if (sp + 2 <= (int)(sizeof(stack) / sizeof(stack[0])))
+				{
+					stack[sp++] = { child1, tmin1, tmax1 };
+					stack[sp++] = { child0, tmin0, tmax0 };
+				}
+				else
+					stack[sp++] = { child0, tmin0, tmax0 };
+			}
+
+			else if (intersect0)
+				stack[sp++] = { child0, tmin0, tmax0 };
+
+			else if (intersect1)
+				stack[sp++] = { child1, tmin1, tmax1 };
+		}
+	}
+
+	if (hit)
+		hInfo = hBest;
+
+	return hit;
 }

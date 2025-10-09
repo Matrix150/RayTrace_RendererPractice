@@ -254,7 +254,7 @@ void MyRenderer::BeginRender()
 	workers.clear();
 	workers.reserve(T);
 
-	constexpr int maxSpecularBounce = 5;		// Set max bounce number
+	constexpr int maxSpecularBounce = 30;		// Set max bounce number
 
 	for (unsigned t = 0; t < T; ++t)
 	{
