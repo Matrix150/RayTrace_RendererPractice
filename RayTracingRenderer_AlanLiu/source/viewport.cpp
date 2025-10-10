@@ -2,7 +2,7 @@
 ///
 /// \file       viewport.cpp 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    5.1
+/// \version    7.0
 /// \date       September 24, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
@@ -25,6 +25,7 @@
 #include "objects.h"
 #include "lights.h"
 #include "materials.h"
+#include "texture.h"
 
 #ifdef USE_GLUT
 # ifdef __APPLE__
@@ -55,6 +56,11 @@ static const char *uiControlsString =
  "Esc   - Terminates software.\n"
  "Mouse Left Click - Writes the pixel information to the console.\n";
 
+//-------------------------------------------------------------------------------
+// OpenGL Extensions:
+#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
+# define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
+#endif
 //-------------------------------------------------------------------------------
 
 Renderer *theRenderer = nullptr;
@@ -146,7 +152,8 @@ void ShowViewport( Renderer *renderer, bool beginRendering )
 	glutMouseFunc   (GlutMouse);
 	glutMotionFunc  (GlutMotion);
 
-	glClearColor(0,0,0,0);
+	Color bg = scene.background.GetValue();
+	glClearColor(bg.r,bg.g,bg.b,0);
 
 	glEnable( GL_CULL_FACE );
 
@@ -238,6 +245,44 @@ void DrawScene( bool flipped=false )
 		glFrontFace(GL_CW);
 	}
 
+	const TextureMap *bgMap = scene.background.GetTexture();
+	if ( bgMap ) {
+		glDepthMask(GL_FALSE);
+		glMatrixMode(GL_PROJECTION);
+		glPushMatrix();
+		glLoadIdentity();
+		if ( flipped ) glScalef(1,-1,1);
+		glMatrixMode(GL_MODELVIEW);
+		Color c = scene.background.GetValue();
+		glColor3f(c.r,c.g,c.b);
+		if ( bgMap->SetViewportTexture() ) {
+			glEnable( GL_TEXTURE_2D );
+			glMatrixMode( GL_TEXTURE );
+			Matrix4f m( bgMap->GetInverseTransform() );
+			glLoadMatrixf( m.cell );
+			glMatrixMode( GL_MODELVIEW );
+		} else {
+			glDisable( GL_TEXTURE_2D );
+		}
+		const float y = 1;
+		glBegin(GL_QUADS);
+		glTexCoord2f(0,1);
+		glVertex2f(-1,-y);
+		glTexCoord2f(1,1);
+		glVertex2f( 1,-y);
+		glTexCoord2f(1,0);
+		glVertex2f( 1, y);
+		glTexCoord2f(0,0);
+		glVertex2f(-1, y);
+		glEnd();
+		glMatrixMode(GL_PROJECTION);
+		glPopMatrix();
+		glMatrixMode(GL_MODELVIEW);
+		glDepthMask(GL_TRUE);
+
+		glDisable( GL_TEXTURE_2D );
+	}
+
 	glEnable( GL_LIGHTING );
 	glEnable( GL_DEPTH_TEST );
 
@@ -281,6 +326,7 @@ void DrawScene( bool flipped=false )
 
 	glDisable( GL_DEPTH_TEST );
 	glDisable( GL_LIGHTING );
+	glDisable( GL_TEXTURE_2D );
 }
 
 //-------------------------------------------------------------------------------
@@ -564,6 +610,7 @@ void Sphere::ViewportDisplay( Material const *mtl ) const
 	static GLUquadric *q = nullptr;
 	if ( q == nullptr ) {
 		q = gluNewQuadric();
+		gluQuadricTexture(q,true);
 	}
 	gluSphere(q,1,50,50);
 }
@@ -571,29 +618,52 @@ void Plane::ViewportDisplay( Material const *mtl ) const
 {
 	const int resolution = 32;
 	float xyInc = 2.0f / resolution;
+	float uvInc = 1.0f / resolution;
 	glPushMatrix();
 	glNormal3f(0,0,1);
 	glBegin(GL_QUADS);
-	float y1=-1, y2=xyInc-1, v1=0;
+	float y1=-1, y2=xyInc-1, v1=0, v2=uvInc;
 	for ( int y=0; y<resolution; y++ ) {
-		float x1=-1, x2=xyInc-1;
+		float x1=-1, x2=xyInc-1, u1=0, u2=uvInc;
 		for ( int x=0; x<resolution; x++ ) {
-			glVertex3f( x1, y1, 0 );
-			glVertex3f( x2, y1, 0 );
-			glVertex3f( x2, y2, 0 );
-			glVertex3f( x1, y2, 0 );
-			x1=x2; x2+=xyInc;
+			glTexCoord2f( u1, v1 );
+			glVertex3f  ( x1, y1, 0 );
+			glTexCoord2f( u2, v1 );
+			glVertex3f  ( x2, y1, 0 );
+			glTexCoord2f( u2, v2 );
+			glVertex3f  ( x2, y2, 0 );
+			glTexCoord2f( u1, v2 );
+			glVertex3f  ( x1, y2, 0 );
+			x1=x2; x2+=xyInc; u1=u2; u2+=uvInc;
 		}
-		y1=y2; y2+=xyInc;
+		y1=y2; y2+=xyInc; v1=v2; v2+=uvInc;
 	}
 	glEnd();
 	glPopMatrix();
 }
 void TriObj::ViewportDisplay( Material const *mtl ) const
 {
+	unsigned int nextMtlID = 0;
+	unsigned int nextMtlSwith = NF();
+	if ( mtl && NM() > 0 ) {
+		mtl->SetViewportMaterial(0);
+		nextMtlSwith = GetMaterialFaceCount(0);
+		nextMtlID = 1;
+	}
 	glBegin(GL_TRIANGLES);
 	for ( unsigned int i=0; i<NF(); i++ ) {
+		while ( i >= nextMtlSwith ) {
+			if ( nextMtlID >= NM() ) nextMtlSwith = NF();
+			else {
+				glEnd();
+				nextMtlSwith += GetMaterialFaceCount(nextMtlID);
+				mtl->SetViewportMaterial(nextMtlID);
+				nextMtlID++;
+				glBegin(GL_TRIANGLES);
+			}
+		}
 		for ( int j=0; j<3; j++ ) {
+			if ( HasTextureVertices() ) glTexCoord3fv( &VT( FT(i).v[j] ).x );
 			if ( HasNormals() ) glNormal3fv( &VN( FN(i).v[j] ).x );
 			glVertex3fv( &V( F(i).v[j] ).x );
 		}
@@ -608,29 +678,43 @@ void GenLight::SetViewportParam( int lightID, ColorA const &ambient, ColorA cons
 	glLightfv( GL_LIGHT0 + lightID, GL_SPECULAR, &intensity.r );
 	glLightfv( GL_LIGHT0 + lightID, GL_POSITION, &pos.x );
 }
+void SetDiffuseTextureMap( TextureMap const *dm )
+{
+	if ( dm && dm->SetViewportTexture() ) {
+		glEnable( GL_TEXTURE_2D );
+		glMatrixMode( GL_TEXTURE );
+		Matrix4f m( dm->GetInverseTransform() );
+		glLoadMatrixf( m.cell );
+		glMatrixMode( GL_MODELVIEW );
+	} else {
+		glDisable( GL_TEXTURE_2D );
+	}
+}
 void MtlPhong::SetViewportMaterial( int subMtlID ) const
 {
-	ColorA d(diffuse);
-	ColorA s(specular);
-	float g = glossiness;
+	ColorA d(diffuse.GetValue());
+	ColorA s(specular.GetValue());
+	float g = glossiness.GetValue();
 	glMaterialfv( GL_FRONT, GL_AMBIENT_AND_DIFFUSE, &d.r );
 	glMaterialfv( GL_FRONT, GL_SPECULAR, &s.r );
 	glMaterialf ( GL_FRONT, GL_SHININESS, g*2 );
+	SetDiffuseTextureMap( diffuse.GetTexture() );
 }
 void MtlBlinn::SetViewportMaterial( int subMtlID ) const
 {
-	ColorA d(diffuse);
-	ColorA s(specular);
-	float g = glossiness;
+	ColorA d(diffuse.GetValue());
+	ColorA s(specular.GetValue());
+	float g = glossiness.GetValue();
 	glMaterialfv( GL_FRONT, GL_AMBIENT_AND_DIFFUSE, &d.r );
 	glMaterialfv( GL_FRONT, GL_SPECULAR, &s.r );
 	glMaterialf ( GL_FRONT, GL_SHININESS, g );
+	SetDiffuseTextureMap( diffuse.GetTexture() );
 }
 void MtlMicrofacet::SetViewportMaterial( int subMtlID ) const
 {
-	const Color bc    = baseColor;
-	const float rough = roughness;
-	const float metal = metallic;
+	const Color bc    = baseColor.GetValue();
+	const float rough = roughness.GetValue();
+	const float metal = metallic .GetValue();
 	float ff = (ior-1)/(ior+1);
 	float f0d = ff*ff;
 	Color f0 = (1 - metal)*f0d + metal*bc;
@@ -643,6 +727,47 @@ void MtlMicrofacet::SetViewportMaterial( int subMtlID ) const
 	glMaterialfv( GL_FRONT, GL_AMBIENT_AND_DIFFUSE, &d.r );
 	glMaterialfv( GL_FRONT, GL_SPECULAR, &s.r );
 	glMaterialf ( GL_FRONT, GL_SHININESS, (1-rough)*128 );
+	SetDiffuseTextureMap( baseColor.GetTexture() );
+}
+bool TextureFile::SetViewportTexture() const
+{
+	if ( viewportTextureID == 0 ) {
+		glGenTextures(1,&viewportTextureID);
+		glBindTexture(GL_TEXTURE_2D,viewportTextureID);
+		gluBuild2DMipmaps( GL_TEXTURE_2D, 3, width, height, GL_RGB, GL_UNSIGNED_BYTE, &data[0].r );
+		glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR );
+		glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+		glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+		glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+	}
+	glBindTexture(GL_TEXTURE_2D,viewportTextureID);
+	return true;
+}
+bool TextureChecker::SetViewportTexture() const
+{
+	if ( viewportTextureID == 0 ) {
+		const int texSize = 1024;
+		glGenTextures(1,&viewportTextureID);
+		glBindTexture(GL_TEXTURE_2D,viewportTextureID);
+		Color24 *tex = new Color24[texSize*texSize];
+		for ( int y=0, i=0; y<texSize; ++y ) {
+			float v = (y + 0.5f) / texSize;
+			for ( int x=0; x<texSize; ++x, ++i ) {
+				float u = (x + 0.5f) / texSize;
+				Vec3f uvw( u, v, 0.5f );
+				tex[i] = Color24( color[ ( (u <= 0.5f) ^ (v <= 0.5f) ) ].Eval(uvw) );
+			}
+		}
+		gluBuild2DMipmaps( GL_TEXTURE_2D, 3, texSize, texSize, GL_RGB, GL_UNSIGNED_BYTE, &tex[0].r );
+		delete [] tex;
+		glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR );
+		glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+		glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT );
+		glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT );
+		glTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 16.0f );
+	}
+	glBindTexture(GL_TEXTURE_2D,viewportTextureID);
+	return true;
 }
 //-------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------

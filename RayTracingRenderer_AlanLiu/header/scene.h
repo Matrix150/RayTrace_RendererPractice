@@ -2,8 +2,8 @@
 ///
 /// \file       scene.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    5.2
-/// \date       October 1, 2025
+/// \version    7.1
+/// \date       October 2, 2025
 ///
 /// \brief Project source for CS 6620 - University of Utah.
 ///
@@ -35,6 +35,7 @@ using namespace cy;
 class Object;
 class Light;
 class Material;
+class Texture;
 class Node;
 class ShadeInfo;
 class Loader;
@@ -44,6 +45,7 @@ template <class T> class ItemList;
 typedef ItemList<Object>   ObjFileList;
 typedef ItemList<Light>    LightList;
 typedef ItemList<Material> MaterialList;
+typedef ItemList<Texture>  TextureFileList;
 
 //-------------------------------------------------------------------------------
 
@@ -71,10 +73,13 @@ struct HitInfo
 	Node const *node;	// the object node that was hit
 	Vec3f       N;		// surface normal at the hit point
 	Vec3f       GN;		// geometry normal at the hit point
+	Vec3f       uvw;	// texture coordinate at the hit point
+	Vec3f       duvw[2];// derivatives of the texture coordinate
+	int         mtlID;	// sub-material index
 	bool        front;	// true if the ray hits the front side, false if the ray hits the back side
 
 	HitInfo() { Init(); }
-	void Init() { z=BIGFLOAT; node=nullptr; front=true; }
+	void Init() { z=BIGFLOAT; node=nullptr; uvw.Set(0.5f); duvw[0].Zero(); duvw[1].Zero(); mtlID=0; front=true; }
 };
 
 //-------------------------------------------------------------------------------
@@ -220,8 +225,128 @@ class Material : public ItemBase
 public:
 	virtual Color Shade( ShadeInfo const &shadeInfo ) const=0;	// the main method that handles shading
 	virtual void SetViewportMaterial( int mtlID=0 ) const {}	// used for OpenGL display
-	virtual void Load( Loader const &loader ) {}
+	virtual void Load( Loader const &loader, TextureFileList &textureFileList ) {}
 };
+
+//-------------------------------------------------------------------------------
+
+class Texture : public ItemBase
+{
+public:
+	// Evaluates the color at the given uvw location.
+	virtual Color Eval( Vec3f const &uvw ) const=0;
+
+	// Evaluates the color around the given uvw location using the derivatives duvw
+	// by calling the Eval function multiple times.
+	virtual Color Eval( Vec3f const &uvw, Vec3f const duvw[2] ) const
+	{
+		Color c = Eval(uvw);
+		if ( duvw[0].LengthSquared() + duvw[1].LengthSquared() == 0 ) return c;
+		const int sampleCount = 32;
+		for ( int i=1; i<sampleCount; i++ ) {
+			float x=0, y=0, fx=0.5f, fy=1.0f/3.0f;
+			for ( int ix=i; ix>0; ix/=2 ) { x+=fx*(ix%2); fx/=2; }	// Halton sequence (base 2)
+			for ( int iy=i; iy>0; iy/=3 ) { y+=fy*(iy%3); fy/=3; }	// Halton sequence (base 3)
+			if ( x > 0.5f ) x-=1;
+			if ( y > 0.5f ) y-=1;
+			c += Eval( uvw + x*duvw[0] + y*duvw[1] );
+		}
+		return c / float(sampleCount);
+	}
+
+	virtual bool SetViewportTexture() const { return false; }	// used for OpenGL display
+
+	virtual void Load( Loader const &loader, TextureFileList &textureFileList ) {}
+
+protected:
+
+	// Clamps the uvw values for tiling textures, such that all values fall between 0 and 1.
+	static Vec3f TileClamp( Vec3f const &uvw )
+	{
+		Vec3f u;
+		u.x = uvw.x - (int) uvw.x;
+		u.y = uvw.y - (int) uvw.y;
+		u.z = uvw.z - (int) uvw.z;
+		if ( u.x < 0 ) u.x += 1;
+		if ( u.y < 0 ) u.y += 1;
+		if ( u.z < 0 ) u.z += 1;
+		return u;
+	}
+};
+
+//-------------------------------------------------------------------------------
+
+// This class handles textures with texture transformations.
+// The uvw values passed to the Eval methods are transformed
+// using the texture transformation.
+class TextureMap : public Transformation
+{
+public:
+	TextureMap() : texture(nullptr) {}
+	TextureMap( Texture const *tex ) : texture(tex) {}
+	void SetTexture( Texture const *tex ) { texture = tex; }
+
+	virtual Color Eval( Vec3f const &uvw ) const { return texture ? texture->Eval(TransformTo(uvw)) : Color(0,0,0); }
+	virtual Color Eval( Vec3f const &uvw, Vec3f const duvw[2] ) const
+	{
+		if ( texture == nullptr ) return Color(0,0,0);
+		Vec3f d[2] = { DirectionTransformTo(duvw[0]), DirectionTransformTo(duvw[1]) };
+		return texture->Eval( TransformTo(uvw), d );
+	}
+
+	bool SetViewportTexture() const { if ( texture ) return texture->SetViewportTexture(); return false; }	// used for OpenGL display
+
+private:
+	Texture const *texture;
+};
+
+//-------------------------------------------------------------------------------
+
+// This class keeps a TextureMap and a value. This is useful for keeping material
+// parameters that can also be textures. If no texture is specified, it automatically 
+// uses the value. Otherwise, the texture is multiplied by the value.
+template <typename T>
+class TexturedValue
+{
+private:
+	T value;
+	TextureMap *map;
+public:
+	TexturedValue() : value(T(0.0f)), map(nullptr) {}
+	TexturedValue( T const &v ) : value(v), map(nullptr) {}
+	virtual ~TexturedValue() { if ( map ) delete map; }
+
+	void SetValue( T const &c ) { value=c; }
+	void SetTexture( TextureMap *m ) { if ( map ) delete map; map=m; }
+
+	T GetValue() const { return value; }
+	const TextureMap* GetTexture() const { return map; }
+
+	T Eval( Vec3f const &uvw ) const { return ( map ) ? value*EvalMap(uvw) : value; }
+	T Eval( Vec3f const &uvw, Vec3f const duvw[2] ) const { return ( map ) ? value*EvalMap(uvw,duvw) : value; }
+
+	// Returns the value value at the given direction for environment mapping.
+	T EvalEnvironment( Vec3f const &dir ) const
+	{
+		float len = dir.Length();
+		float z = std::asin(-dir.z/len)/Pi<float>()+0.5f;
+		float x = dir.x / (fabs(dir.x)+fabs(dir.y));
+		float y = dir.y / (fabs(dir.x)+fabs(dir.y));
+		return Eval( Vec3f(0.5f + 0.5f*z*(x-y), 0.5f + 0.5f*z*(x+y), 0.0f) );
+	}
+
+private:
+	T EvalMap( Vec3f const &uvw ) const;
+	T EvalMap( Vec3f const &uvw, Vec3f const duvw[2] ) const;
+};
+
+template <> inline Color TexturedValue<Color>::EvalMap( Vec3f const &uvw ) const { return map->Eval(uvw); }
+template <> inline float TexturedValue<float>::EvalMap( Vec3f const &uvw ) const { return map->Eval(uvw).r; }
+template <> inline Color TexturedValue<Color>::EvalMap( Vec3f const &uvw, Vec3f const duvw[2] ) const { return map->Eval(uvw,duvw); }
+template <> inline float TexturedValue<float>::EvalMap( Vec3f const &uvw, Vec3f const duvw[2] ) const { return map->Eval(uvw,duvw).r; }
+
+typedef TexturedValue<Color> TexturedColor;
+typedef TexturedValue<float> TexturedFloat;
 
 //-------------------------------------------------------------------------------
 
@@ -304,10 +429,13 @@ public:
 
 struct Scene
 {
-	Node         rootNode;
-	ObjFileList  objList;
-	LightList    lights;
-	MaterialList materials;
+	Node            rootNode;
+	ObjFileList     objList;
+	LightList       lights;
+	MaterialList    materials;
+	TextureFileList texFiles;
+	TexturedColor   background;
+	TexturedColor   environment;
 
 	void Load( Loader const &loader );
 };

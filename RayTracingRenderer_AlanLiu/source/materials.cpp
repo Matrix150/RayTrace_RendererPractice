@@ -54,6 +54,10 @@ Color MtlPhong::Shade(ShadeInfo const& shadeInfo) const
 	const Vec3f V = shadeInfo.V().GetNormalized();		// viewing
 	Color color(0.0f, 0.0f, 0.0f);
 
+	const Color diffuse = shadeInfo.Eval(Diffuse());
+	const Color specular = shadeInfo.Eval(Specular());
+	const float glossiness = shadeInfo.Eval(Glossiness());
+
 	const int lightNum = shadeInfo.NumLights();	// light numbers
 	// Loop all lights
 	for (int i = 0; i < lightNum; ++i)
@@ -66,7 +70,7 @@ Color MtlPhong::Shade(ShadeInfo const& shadeInfo) const
 		// Add ambient light
 		if (light->IsAmbient())
 		{
-			color += Diffuse() * lightColor;
+			color += diffuse * lightColor;
 			continue;
 		}
 
@@ -74,13 +78,13 @@ Color MtlPhong::Shade(ShadeInfo const& shadeInfo) const
 		if (NdotL > 0.0f)
 		{
 			// Add diffuse
-			color += Diffuse() * lightColor * NdotL;
+			color += diffuse * lightColor * NdotL;
 
 			Vec3f R = (2.0f * NdotL) * N - L;		// Reflection
 			R.Normalize();
 			const float RdotV = std::max(0.0f, R % V);
 			// Add specular
-			color += Specular() * lightColor * std::pow(RdotV, Glossiness());
+			color += specular * lightColor * std::pow(RdotV, glossiness);
 		}
 	}
 
@@ -97,6 +101,10 @@ Color MtlBlinn::Shade(ShadeInfo const& shadeInfo) const
 	const Vec3f V = shadeInfo.V().GetNormalized();		// viewing
 	Color color(0.0f, 0.0f, 0.0f);
 
+	const Color diffuse = shadeInfo.Eval(Diffuse());
+	const Color specular = shadeInfo.Eval(Specular());
+	const float glossiness = shadeInfo.Eval(Glossiness());
+
 	const int lightNum = shadeInfo.NumLights();	// light numbers
 	// Loop all lights
 	for (int i = 0; i < lightNum; ++i)
@@ -109,7 +117,7 @@ Color MtlBlinn::Shade(ShadeInfo const& shadeInfo) const
 		// Add ambient light
 		if (light->IsAmbient())
 		{
-			color += Diffuse() * lightColor;
+			color += diffuse * lightColor;
 			continue;
 		}
 
@@ -117,11 +125,11 @@ Color MtlBlinn::Shade(ShadeInfo const& shadeInfo) const
 		if (NdotL > 0.0f)
 		{
 			// Add diffuse
-			color += Diffuse() * lightColor * NdotL;
+			color += diffuse * lightColor * NdotL;
 			Vec3f H = (L + V).GetNormalized();		// halfway vector H
 			const float NdotH = std::max(0.0f, N % H);
 			// Add Specular
-			color += Specular() * lightColor * std::pow(NdotH, Glossiness());
+			color += specular * lightColor * std::pow(NdotH, glossiness);
 		}
 	}
 
@@ -129,8 +137,8 @@ Color MtlBlinn::Shade(ShadeInfo const& shadeInfo) const
 	{
 		constexpr float kEps = 1e-4f;
 
-		const Color kr = Reflection();
-		const Color kt = Refraction();
+		const Color kr = shadeInfo.Eval(Reflection());
+		const Color kt = shadeInfo.Eval(Refraction());
 		const Color sigma = Absorption();
 		const float ior = IOR();
 

@@ -53,6 +53,13 @@ bool Sphere::IntersectRay(Ray const& ray, HitInfo& hInfo, int hitSide) const
 	hInfo.GN = N;
 	hInfo.front = front;
 
+	// UV
+	float u = 0.5f + std::atan2(N.y, N.x) / (2.0f * Pi<float>());
+	//if (u < 0.0f)
+		//u += 1.0f;
+	float v = 0.5f + std::asin(N.z) / Pi<float>();
+	hInfo.uvw.Set(u, v, 1.0f);
+
 	return true;
 }
 
@@ -83,6 +90,11 @@ bool Plane::IntersectRay(Ray const& ray, HitInfo& hInfo, int hitSide) const
 	hInfo.N = N;
 	hInfo.GN = N;
 	hInfo.front = front;
+
+	// UV
+	float u = 0.5f * (p.x + 1.0f);
+	float v = 0.5f * (p.y + 1.0f);
+	hInfo.uvw.Set(u, v, 0.0f);
 
 	return true;
 }
@@ -180,6 +192,12 @@ bool TriObj::IntersectTriangle(Ray const& ray, HitInfo& hInfo, int hitSide, unsi
 	hInfo.N = N;
 	hInfo.GN = GN;
 	hInfo.front = front;
+
+	// UV
+	Vec3f uv(0.5f, 0.5f, 0.0f);
+	if (HasTextureVertices())
+		uv = GetTexCoord((int)faceID, Vec3f(1.0f - u - v, u, v));
+	hInfo.uvw.Set(uv.x, uv.y, 0.0f);
 
 	return true;
 }

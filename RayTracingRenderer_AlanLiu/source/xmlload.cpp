@@ -2,8 +2,8 @@
 ///
 /// \file       xmlload.cpp 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    5.0
-/// \date       September 19, 2025
+/// \version    7.1
+/// \date       October 2, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
 ///
@@ -19,6 +19,7 @@
 #include "objects.h"
 #include "lights.h"
 #include "materials.h"
+#include "texture.h"
 
 //-------------------------------------------------------------------------------
 
@@ -29,8 +30,11 @@ Plane  thePlane;
 
 void LoadNode     ( Loader loader, Node         &parent,    ObjFileList &objList );
 void LoadLight    ( Loader loader, LightList    &lights );
-void LoadMaterial ( Loader loader, MaterialList &materials );
-void SetNodeMaterials( Node *node, MaterialList &materials );
+void LoadMaterial ( Loader loader, MaterialList &materials, TextureFileList &texFiles );
+void SetNodeMaterials( Node *node, MaterialList &materials, TextureFileList &texFiles );
+
+TextureFile* ReadTextureFile( TextureFileList &texFiles, char const *filename );
+Material*    CreateMultiMtl ( TextureFileList &texFiles, TriObj const *tobj   );
 
 //-------------------------------------------------------------------------------
 
@@ -79,17 +83,20 @@ void Scene::Load( Loader const &sceneLoader )
 	objList  .DeleteAll();
 	lights   .DeleteAll();
 	materials.DeleteAll();
+	texFiles .DeleteAll();
 
 	for ( Loader loader : sceneLoader ) {
-		if      ( loader == "object"      ) LoadNode    ( loader, rootNode, objList );
+		if      ( loader == "object"      ) LoadNode    ( loader, rootNode,  objList  );
 		else if ( loader == "light"       ) LoadLight   ( loader, lights );
-		else if ( loader == "material"    ) LoadMaterial( loader, materials );
+		else if ( loader == "material"    ) LoadMaterial( loader, materials, texFiles );
+		else if ( loader == "background"  ) loader.ReadTexturedColor( background,  texFiles );
+		else if ( loader == "environment" ) loader.ReadTexturedColor( environment, texFiles );
 		else printf("WARNING: Unknown tag \"%s\"\n", static_cast<char const*>(loader.Tag()));
 	}
 
 	rootNode.ComputeChildBoundBox();
 
-	SetNodeMaterials( &rootNode, materials );
+	SetNodeMaterials( &rootNode, materials, texFiles );
 }
 
 //-------------------------------------------------------------------------------
@@ -144,6 +151,7 @@ void LoadNode( Loader loader, Node &parent, ObjFileList &objList )
 					objList.push_back(tobj);	// add to the list
 				}
 			}
+			if ( mtlName==nullptr && tobj && tobj->NM()>0 ) node->SetMaterial( (Material*)tobj );	// temporarily set the material pointer to the object
 			node->SetNodeObj( tobj );
 		} else printf("ERROR: Unknown object type %s\n", static_cast<char const*>(type));
 	}
@@ -226,7 +234,7 @@ void PointLight::Load( Loader const &loader )
 
 //-------------------------------------------------------------------------------
 
-void LoadMaterial( Loader loader, MaterialList &materials )
+void LoadMaterial( Loader loader, MaterialList &materials, TextureFileList &texFiles )
 {
 	Material *mtl = nullptr;
 
@@ -240,46 +248,135 @@ void LoadMaterial( Loader loader, MaterialList &materials )
 	}
 
 	mtl->SetName( loader.Attribute("name") );
-	mtl->Load( loader );
+	mtl->Load( loader, texFiles );
 	materials.push_back(mtl);
 }
 
 //-------------------------------------------------------------------------------
 
-void MtlBasePhongBlinn::Load( Loader const &loader )
+void MtlBasePhongBlinn::Load( Loader const &loader, TextureFileList &tfl )
 {
-	loader.Child("diffuse"   ).ReadColor( diffuse    );
-	loader.Child("specular"  ).ReadColor( specular   );
-	loader.Child("glossiness").ReadFloat( glossiness );
-	loader.Child("reflection").ReadColor( reflection );
-	loader.Child("refraction").ReadColor( refraction );
+	loader.Child("diffuse"   ).ReadTexturedColor( diffuse,    tfl );
+	loader.Child("specular"  ).ReadTexturedColor( specular,   tfl );
+	loader.Child("glossiness").ReadTexturedFloat( glossiness, tfl );
+	loader.Child("reflection").ReadTexturedColor( reflection, tfl );
+	loader.Child("refraction").ReadTexturedColor( refraction, tfl );
 	loader.Child("refraction").ReadFloat( ior, "index" );
 	loader.Child("absorption").ReadColor( absorption );
 }
 
 //-------------------------------------------------------------------------------
 
-void MtlMicrofacet::Load( Loader const &loader )
+void MtlMicrofacet::Load( Loader const &loader, TextureFileList &tfl )
 {
-	loader.Child("color"        ).ReadColor( baseColor     );
-	loader.Child("roughness"    ).ReadFloat( roughness     );
-	loader.Child("metallic"     ).ReadFloat( metallic      );
-	loader.Child("transmittance").ReadColor( transmittance );
-	loader.Child("ior"          ).ReadFloat( ior           );
-	loader.Child("absorption"   ).ReadColor( absorption    );
+	loader.Child("color"        ).ReadTexturedColor( baseColor,     tfl );
+	loader.Child("roughness"    ).ReadTexturedFloat( roughness,     tfl );
+	loader.Child("metallic"     ).ReadTexturedFloat( metallic,      tfl );
+	loader.Child("transmittance").ReadTexturedColor( transmittance, tfl );
+	loader.Child("ior"          ).ReadFloat( ior        );
+	loader.Child("absorption"   ).ReadColor( absorption );
 }
 
 //-------------------------------------------------------------------------------
 
-void SetNodeMaterials( Node *node, MaterialList &materials )
+void SetNodeMaterials( Node *node, MaterialList &materials, TextureFileList &texFiles )
 {
 	int n = node->GetNumChild();
 	if ( node->GetMaterial() ) {
-		const char *mtlName = (const char*) node->GetMaterial();
-		Material *mtl = materials.Find( mtlName );	// mtl can be null
-		node->SetMaterial(mtl);
+		if ( node->GetNodeObj() == (Object*) node->GetMaterial() ) {
+			// if the material pointer was set to the object, we must create the object's material.
+			Material *mtl = materials.Find( node->GetName() );
+			if ( !mtl ) {
+				mtl = CreateMultiMtl( texFiles, (TriObj*) node->GetNodeObj() );
+				mtl->SetName( node->GetName() );
+				materials.push_back(mtl);
+			}
+			node->SetMaterial(mtl);
+		} else {
+			const char *mtlName = (const char*) node->GetMaterial();
+			Material *mtl = materials.Find( mtlName );	// mtl can be null
+			node->SetMaterial(mtl);
+		}
 	}
-	for ( int i=0; i<n; i++ ) SetNodeMaterials( node->GetChild(i), materials );
+	for ( int i=0; i<n; i++ ) SetNodeMaterials( node->GetChild(i), materials, texFiles );
+}
+
+//-------------------------------------------------------------------------------
+
+Material* CreateMultiMtl( TextureFileList &texFiles, TriObj const *tobj )
+{
+	// generate multi-material
+	MultiMtl *mm = new MultiMtl;
+	for ( unsigned int i=0; i<tobj->NM(); i++ ) {
+		MtlBlinn *m = new MtlBlinn;
+		TriMesh::Mtl const &mtl = tobj->M(i);
+		m->SetDiffuse( Color(mtl.Kd) );
+		m->SetSpecular( Color(mtl.Ks) );
+		m->SetGlossiness( mtl.Ns );
+		m->SetIOR( mtl.Ni );
+		if ( mtl.map_Kd.data != nullptr ) m->SetDiffuseTexture( new TextureMap(ReadTextureFile(texFiles,mtl.map_Kd.data)) );
+		if ( mtl.map_Ks.data != nullptr ) m->SetDiffuseTexture( new TextureMap(ReadTextureFile(texFiles,mtl.map_Ks.data)) );
+		if ( mtl.illum > 2 && mtl.illum <= 7 ) {
+			m->SetReflection( Color(mtl.Ks) );
+			if ( mtl.map_Ks.data != nullptr ) m->SetReflectionTexture( new TextureMap(ReadTextureFile(texFiles,mtl.map_Ks.data)) );
+			float gloss = std::acos(std::pow(2.0f,1.0f/mtl.Ns));
+			if ( mtl.illum >= 6 ) {
+				m->SetRefraction( 1 - Color(mtl.Tf) );
+			}
+		}
+		mm->AppendMaterial(m);
+	}
+	return mm;
+}
+
+//-------------------------------------------------------------------------------
+
+TextureMap* Loader::ReadTextureMap( TextureFileList &texFiles ) const
+{
+	Loader::String texName = Attribute("texture");
+	if ( ! texName ) return nullptr;
+
+	Texture *tex = nullptr;
+	if ( texName == "checkerboard" ) {
+		tex = new TextureChecker;
+		tex->Load(*this,texFiles);	// loads the texture parameters
+		tex->SetName(texName);
+	} else {
+		tex = ReadTextureFile( texFiles, texName );
+	}
+	if ( ! tex ) return nullptr;
+
+	TextureMap *map = new TextureMap(tex);
+	map->Load( *this );	// loads the transformations
+	return map;
+}
+
+//-------------------------------------------------------------------------------
+
+void TextureChecker::Load( Loader const &loader, TextureFileList &texFiles )
+{
+	loader.Child("color1").ReadTexturedColor( color[0], texFiles );
+	loader.Child("color2").ReadTexturedColor( color[1], texFiles );
+}
+
+//-------------------------------------------------------------------------------
+
+TextureFile* ReadTextureFile( TextureFileList &texFiles, char const *texName )
+{
+	TextureFile *tex = (TextureFile*) texFiles.Find( texName );
+	if ( tex == nullptr ) {
+		tex = new TextureFile;
+		tex->SetName(texName);
+		if ( ! tex->LoadFile() ) {
+			printf("ERROR: cannot load file %s\n", texName);
+			delete tex;
+			tex = nullptr;
+		} else {
+			tex->SetName(texName);
+			texFiles.push_back(tex);
+		}
+	}
+	return tex;
 }
 
 //-------------------------------------------------------------------------------

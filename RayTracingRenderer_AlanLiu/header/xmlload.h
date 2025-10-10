@@ -2,7 +2,7 @@
 ///
 /// \file       xmlload.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    1.0
+/// \version    7.0
 /// \date       September 19, 2025
 ///
 /// \brief Project source for CS 6620 - University of Utah.
@@ -59,6 +59,10 @@ public:
 	bool ReadInt  ( int   &i, char const *name="value" ) const { return elem && elem->QueryIntAttribute  ( name, &i ) == tinyxml2::XML_SUCCESS; }
 	void ReadVec3f( Vec3f &v, Vec3f const &def=Vec3f(0,0,0) ) const { if (elem) { v=def; ReadFloat(v.x,"x"); ReadFloat(v.y,"y"); ReadFloat(v.z,"z"); float f=1; if ( ReadFloat(f) ) v *= f; } }
 	void ReadColor( Color &c, Color const &def=Color(1,1,1) ) const { if (elem) { c=def; ReadFloat(c.r,"r"); ReadFloat(c.g,"g"); ReadFloat(c.b,"b"); float f=1; if ( ReadFloat(f) ) c *= f; } }
+	void ReadTexturedColor( TexturedColor &tc, TextureFileList &tfl ) const { if (elem) { Color c(1,1,1); ReadColor(c); tc.SetValue(c); tc.SetTexture(ReadTextureMap(tfl)); } }
+	void ReadTexturedFloat( TexturedFloat &tc, TextureFileList &tfl ) const { if (elem) { float f = 1.0f; ReadFloat(f); tc.SetValue(f); tc.SetTexture(ReadTextureMap(tfl)); } }
+
+	TextureMap* ReadTextureMap( TextureFileList &tfl ) const;
 
 	Loader const Child( char const *name ) const { return Loader( elem ? elem->FirstChildElement(name) : nullptr ); }
 

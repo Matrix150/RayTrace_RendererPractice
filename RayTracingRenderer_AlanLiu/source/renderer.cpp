@@ -101,7 +101,7 @@ static inline void ConstructCameraBasis(const Camera& camera, Vec3f& camRight, V
 class MyShadeInfo : public ShadeInfo
 {
 public:
-	MyShadeInfo(const Renderer* renderer, const std::vector<Light*>& lights, int maxBounce) : ShadeInfo(lights), rendererPtr(renderer), maxSpecularBounce(maxBounce) {}
+	MyShadeInfo(const Renderer* renderer, const std::vector<Light*>& lights, const TexturedColor& environment,int maxBounce) : ShadeInfo(lights, environment), rendererPtr(renderer), maxSpecularBounce(maxBounce) {}
 
 	float TraceShadowRay(const Ray& ray, float t_max = BIGFLOAT) const override;
 
@@ -254,7 +254,7 @@ void MyRenderer::BeginRender()
 	workers.clear();
 	workers.reserve(T);
 
-	constexpr int maxSpecularBounce = 30;		// Set max bounce number
+	constexpr int maxSpecularBounce = 100;		// Set max bounce number
 
 	for (unsigned t = 0; t < T; ++t)
 	{
@@ -300,7 +300,7 @@ void MyRenderer::BeginRender()
 								// Get material
 								const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
 
-								MyShadeInfo shadeInfo(this, scene.lights, maxSpecularBounce);
+								MyShadeInfo shadeInfo(this, scene.lights, scene.environment,maxSpecularBounce);
 								shadeInfo.SetPixel(x, y);
 								// shade hitInfo
 								shadeInfo.SetHit(ray, hInfo);
@@ -316,7 +316,11 @@ void MyRenderer::BeginRender()
 							else
 							{
 								zBuffer[index] = BIGFLOAT;
-								pixels[index] = Color24(0, 0, 0);		// Black for not hit
+								//pixels[index] = Color24(0, 0, 0);		// Black for not hit
+								float u = (x + 0.5f) / float(width);
+								float v = (y + 0.5f) / float(height);
+								Color bg = scene.background.Eval(Vec3f(u, v, 0.0f));
+								pixels[index] = Color24(ToByte(bg.r), ToByte(bg.g), ToByte(bg.b));
 							}
 							++claimed;
 						}
