@@ -25,6 +25,7 @@ class TextureFile : public Texture
 {
 public:
 	Color Eval( Vec3f const &uvw ) const override;
+	Color Eval( Vec3f const& uvw, Vec3f const duvw[2] ) const override;		// For mipmap/anisotropic
 	bool  SetViewportTexture()     const override;
 	bool  LoadFile();
 private:
@@ -32,6 +33,19 @@ private:
 	int width  = 0;
 	int height = 0;
 	mutable unsigned int viewportTextureID = 0;
+
+	// mipmap
+	struct MipLevel
+	{
+		int w = 0, h = 0;
+		std::vector<Color24> texture;
+	};
+	std::vector<MipLevel> mipmaps;
+
+	void BuildMipmaps();
+	Color SampleBilinear(int level, float u, float v) const;
+	Color SampleTrilinear(float u, float v, float lod) const;
+	Color SampleAnisotropic(float u, float v, Vec2f dx, Vec2f dy, int maxAniso = 8) const;
 };
 
 //-------------------------------------------------------------------------------

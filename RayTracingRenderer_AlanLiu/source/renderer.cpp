@@ -132,21 +132,21 @@ float MyShadeInfo::TraceShadowRay(const Ray& ray, float t_max) const
 Color MyShadeInfo::TraceSecondaryRay(const Ray& ray, float& dist) const
 {
 	dist = BIGFLOAT;
-	Color color(0.0f, 0.0f, 0.0f);
-
-	// Check if can bounce
-	if (!CanBounce())
-		return color;
 
 	constexpr float kEps = 1e-4f;
 	Vec3f dir = ray.dir.GetNormalized();
 	Ray raySencondary(ray.p + dir * kEps, dir);
+
+	// Check if can bounce
+	if (!CanBounce())
+		return env.EvalEnvironment(dir);
+
 	HitInfo hInfo;
 	hInfo.Init();
 
 	// Secondary ray not hit
 	if (!rendererPtr->TraceRay(raySencondary, hInfo, HIT_FRONT_AND_BACK))
-		return color;
+		return env.EvalEnvironment(dir);
 
 	MyShadeInfo* self = const_cast<MyShadeInfo*>(this);
 	self->IncrementBounce();
@@ -158,10 +158,10 @@ Color MyShadeInfo::TraceSecondaryRay(const Ray& ray, float& dist) const
 		dist = 0.0f;
 
 	const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
-	if (material)
-		color = material->Shade(*self);
+	if (!material)
+		return Color(0.0f, 0.0f, 0.0f);
 
-	return color;
+	return material->Shade(*self);
 }
 
 
