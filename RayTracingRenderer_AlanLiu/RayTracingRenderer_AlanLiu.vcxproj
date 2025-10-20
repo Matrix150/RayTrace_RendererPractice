@@ -31,6 +31,7 @@
     <ClInclude Include="header\materials.h" />
     <ClInclude Include="header\objects.h" />
     <ClInclude Include="header\renderer.h" />
+    <ClInclude Include="header\rng.h" />
     <ClInclude Include="header\scene.h" />
     <ClInclude Include="header\texture.h" />
     <ClInclude Include="header\xmlload.h" />

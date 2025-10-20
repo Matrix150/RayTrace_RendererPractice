@@ -2,7 +2,7 @@
 ///
 /// \file       renderer.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    7.0
+/// \version    8.0
 /// \date       September 24, 2025
 ///
 /// \brief Project source for CS 6620 - University of Utah.
@@ -31,6 +31,8 @@ private:
 	std::vector<Color24> img;
 	std::vector<float>   zbuffer;
 	std::vector<uint8_t> zbufferImg;
+	std::vector<int>     sampleCount;
+	std::vector<uint8_t> sampleCountImg;
 	int                  width=0, height=0;
 	std::atomic<int>     numRenderedPixels=0;
 public:
@@ -43,41 +45,54 @@ public:
 		zbuffer.resize(size);
 		for ( int i=0; i<size; ++i ) zbuffer[i] = BIGFLOAT;
 		zbufferImg.resize(size);
+		sampleCount.resize(size);
+		memset( sampleCount.data(), 0, size*sizeof(uint8_t) );
+		sampleCountImg.resize(size);
 		ResetNumRenderedPixels();
 	}
 
-	int      GetWidth  () const { return width; }
-	int      GetHeight () const { return height; }
-	Color24* GetPixels ()       { return img.data(); }
-	float*   GetZBuffer()       { return zbuffer.data(); }
-	uint8_t* GetZBufferImage()  { return zbufferImg.data(); }
+	int      GetWidth  () const    { return width; }
+	int      GetHeight () const    { return height; }
+	Color24* GetPixels ()          { return img.data(); }
+	float*   GetZBuffer()          { return zbuffer.data(); }
+	uint8_t* GetZBufferImage()     { return zbufferImg.data(); }
+	int*     GetSampleCount()      { return sampleCount.data(); }
+	uint8_t* GetSampleCountImage() { return sampleCountImg.data(); }
 
 	void ResetNumRenderedPixels ()        { numRenderedPixels=0; }
 	int  GetNumRenderedPixels   () const  { return numRenderedPixels; }
 	bool IsRenderDone           () const  { return numRenderedPixels >= width*height; }
 	void IncrementNumRenderPixel( int n ) { numRenderedPixels+=n; }
 
-	void ComputeZBufferImage()
+	void ComputeZBufferImage() { ComputeImage<float,true>( zbufferImg, zbuffer, BIGFLOAT ); }
+	int  ComputeSampleCountImage() { return ComputeImage<int,false>( sampleCountImg, sampleCount, 0 );}
+
+	bool SaveImage           ( char const *filename ) const { return lodepng::encode(filename,&img[0].r,         width,height,LCT_RGB, 8) == 0; }
+	bool SaveZImage          ( char const *filename ) const { return lodepng::encode(filename,&zbufferImg[0],    width,height,LCT_GREY,8) == 0; }
+	bool SaveSampleCountImage( char const *filename ) const { return lodepng::encode(filename,&sampleCountImg[0],width,height,LCT_GREY,8) == 0; }
+
+private:
+	template <typename T, bool invert>
+	T ComputeImage( std::vector<uint8_t> &img, std::vector<T> &data, T skipv )
 	{
 		int size = width * height;
-		float zmin=BIGFLOAT, zmax=0;
+		T vmin=std::numeric_limits<T>::max(), vmax=T(0);
 		for ( int i=0; i<size; i++ ) {
-			if ( zbuffer[i] == BIGFLOAT ) continue;
-			if ( zmin > zbuffer[i] ) zmin = zbuffer[i];
-			if ( zmax < zbuffer[i] ) zmax = zbuffer[i];
+			if ( data[i] == skipv ) continue;
+			if ( vmin > data[i] ) vmin = data[i];
+			if ( vmax < data[i] ) vmax = data[i];
 		}
 		for ( int i=0; i<size; i++ ) {
-			if ( zbuffer[i] == BIGFLOAT ) zbufferImg[i] = 0;
+			if ( data[i] == skipv ) img[i] = 0;
 			else {
-				float f = (zmax-zbuffer[i])/(zmax-zmin);
+				float f = float(data[i]-vmin)/float(vmax-vmin);
+				if constexpr ( invert ) f = 1 - f;
 				int c = int(f * 255);
-				zbufferImg[i] = c < 0 ? 0 : ( c > 255 ? 255 : c );
+				img[i] = c < 0 ? 0 : ( c > 255 ? 255 : c );
 			}
 		}
+		return vmax;
 	}
-
-	bool SaveImage ( char const *filename ) const { return lodepng::encode(filename,&img[0].r,     width,height,LCT_RGB, 8) == 0; }
-	bool SaveZImage( char const *filename ) const { return lodepng::encode(filename,&zbufferImg[0],width,height,LCT_GREY,8) == 0; }
 };
 
 //-------------------------------------------------------------------------------
@@ -115,6 +130,7 @@ public:
 
 	virtual bool CanBounce() const { return false; }	// returns if an additional bounce is permitted
 	virtual int  CurrentSpecularBounce() const { return bounceS; }	// returns the current specular bounce (zero for primary rays)
+	virtual int  CurrentPixelSample   () const { return pSample; }	// returns the current pixel sample ID
 
 	// Traces a shadow ray and returns the visibility
 	virtual float TraceShadowRay( Ray   const &ray, float t_max=BIGFLOAT ) const { return 1.0f; }
@@ -140,12 +156,15 @@ public:
 
 	void IncrementBounce() { bounceS++; }
 
+	void SetPixelSample( int i ) { pSample = i; }
+
 protected:
 	Ray     ray;			// the ray that found this hit point
 	HitInfo hInfo;			// ht information
 	int     pixelX  = 0;	// current pixel's x coordinate
 	int     pixelY  = 0;	// current pixel's y coordinate
 	int     bounceS = 0;	// current specular bounce
+	int     pSample = 0;	// current pixel sample
 
 	std::vector<Light*> const &lights;	// lights
 	TexturedColor       const &env;		// environment

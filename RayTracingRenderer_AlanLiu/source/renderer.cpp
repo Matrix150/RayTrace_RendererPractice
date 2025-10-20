@@ -2,6 +2,7 @@
 #include <algorithm>
 #include "renderer.h"
 #include "lights.h"
+#include "rng.h"
 
 
 // Transform from Color(0, 1) to Color24 (0, 255)
@@ -222,12 +223,15 @@ void MyRenderer::BeginRender()
 	const int pixelNum = width * height;
 	Color24* const pixels = renderImage.GetPixels();
 	float* const zBuffer = renderImage.GetZBuffer();
+	int* const sampleCount = renderImage.GetSampleCount();
 
 	// clear screen
 	for (int i = 0; i < pixelNum; ++i)
 	{
 		zBuffer[i] = BIGFLOAT;
 		pixels[i] = Color24(0, 0, 0);
+		if (sampleCount)
+			sampleCount[i] = 0;
 	}
 
 	// Camera basis vectors
@@ -256,10 +260,85 @@ void MyRenderer::BeginRender()
 
 	constexpr int maxSpecularBounce = 100;		// Set max bounce number
 
+	constexpr int sppMin = 4;		// sample per pixel
+	constexpr int sppMax = 64;
+	constexpr float deltaTolerance = 0.007f;
+	HaltonSeq<sppMax> haltonX(2);
+	HaltonSeq<sppMax> haltonY(3);
+
+	// using T-test table
+	auto Ttest_approx = [](int n) -> float
+		{
+			int nMinusOne = std::max(1, n - 1);
+			if (nMinusOne == 1) return 63.657f;
+			if (nMinusOne == 2) return 9.925f;
+			if (nMinusOne == 3) return 5.841f;
+			if (nMinusOne == 4) return 4.604f;
+			if (nMinusOne == 5) return 4.032f;
+			if (nMinusOne == 6) return 3.707f;
+			if (nMinusOne == 7) return 3.499f;
+			if (nMinusOne == 8) return 3.355f;
+			if (nMinusOne == 9) return 3.250f;
+			if (nMinusOne == 10) return 3.169f;
+			if (nMinusOne == 11) return 3.106f;
+			if (nMinusOne == 12) return 3.055f;
+			if (nMinusOne == 13) return 3.012f;
+			if (nMinusOne == 14) return 2.977f;
+			if (nMinusOne == 15) return 2.947f;
+			if (nMinusOne == 16) return 2.921f;
+			if (nMinusOne == 17) return 2.898f;
+			if (nMinusOne == 18) return 2.878f;
+			if (nMinusOne == 19) return 2.861f;
+			if (nMinusOne == 20) return 2.845f;
+			if (nMinusOne == 21) return 2.831f;
+			if (nMinusOne == 22) return 2.819f;
+			if (nMinusOne == 23) return 2.807f;
+			if (nMinusOne == 24) return 2.797f;
+			if (nMinusOne == 25) return 2.787f;
+			if (nMinusOne == 26) return 2.779f;
+			if (nMinusOne == 27) return 2.771f;
+			if (nMinusOne == 28) return 2.763f;
+			if (nMinusOne == 29) return 2.756f;
+			if (nMinusOne == 30) return 2.750f;
+			if (nMinusOne == 31) return 2.744f;
+			if (nMinusOne == 32) return 2.738f;
+			if (nMinusOne == 33) return 2.733f;
+			if (nMinusOne == 34) return 2.728f;
+			if (nMinusOne == 35) return 2.724f;
+			if (nMinusOne == 36) return 2.719f;
+			if (nMinusOne == 37) return 2.715f;
+			if (nMinusOne == 38) return 2.712f;
+			if (nMinusOne == 39) return 2.708f;
+			if (nMinusOne == 40) return 2.704f;
+			if (nMinusOne == 41) return 2.701f;
+			if (nMinusOne == 42) return 2.698f;
+			if (nMinusOne == 43) return 2.695f;
+			if (nMinusOne == 44) return 2.692f;
+			if (nMinusOne == 45) return 2.690f;
+			if (nMinusOne == 46) return 2.687f;
+			if (nMinusOne == 47) return 2.685f;
+			if (nMinusOne == 48) return 2.682f;
+			if (nMinusOne == 49) return 2.680f;
+			if (nMinusOne == 50) return 2.678f;
+			if (nMinusOne <= 60) return 2.660f;
+			if (nMinusOne <= 70) return 2.648f;
+			if (nMinusOne <= 80) return 2.639f;
+			if (nMinusOne <= 90) return 2.632f;
+			if (nMinusOne <= 100) return 2.626f;
+			if (nMinusOne <= 120) return 2.617f;
+			if (nMinusOne <= 140) return 2.611f;
+			if (nMinusOne <= 180) return 2.603f;
+			if (nMinusOne <= 200) return 2.601f;
+			if (nMinusOne <= 500) return 2.586f;
+			if (nMinusOne <= 1000) return 2.581f;
+			return 2.576f;
+		};
+
 	for (unsigned t = 0; t < T; ++t)
 	{
 		workers.emplace_back([=]()
 			{
+				RNG rng;
 				int claimed = 0;		// Pixels this thread already finished
 				for (;;)
 				{
@@ -277,51 +356,106 @@ void MyRenderer::BeginRender()
 
 					for (int y = y0; y < y1 && !cancel.load(std::memory_order_relaxed); ++y)
 					{
-						const float pixelY = 1.0f - ((y + 0.5f) / float(height)) * 2.0f;
 						for (int x = x0; x < x1 && !cancel.load(std::memory_order_relaxed); ++x)
 						{
-							const float pixelX = ((x + 0.5f) / float(width)) * 2.0f - 1.0f;
-
-							Vec3f dir = (pixelX * aspect * tanHalf) * camRight + (pixelY * tanHalf) * camUp + camDir;
-							dir.Normalize();
-
-							Ray ray(camera.pos, dir);
-							HitInfo hInfo;
-							hInfo.Init();
-							bool hit = this->TraceRay(ray, hInfo, HIT_FRONT_AND_BACK);
-
 							const int index = y * width + x;
 
-							// Fill rendering color
-							if (hit)
-							{
-								zBuffer[index] = hInfo.z;
-								//pixels[index] = Color24(255, 255, 255);		// White for hit
-								// Get material
-								const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
+							const float shiftX = rng.RandomFloat();
+							const float shiftY = rng.RandomFloat();
 
-								MyShadeInfo shadeInfo(this, scene.lights, scene.environment,maxSpecularBounce);
-								shadeInfo.SetPixel(x, y);
-								// shade hitInfo
-								shadeInfo.SetHit(ray, hInfo);
-								// Get shade function in materials.cpp
-								Color color(1.0f, 1.0f, 1.0f);
+							Color sampleTotal(0.0f, 0.0f, 0.0f);
+							Color sampleTotalSquare(0.0f, 0.0f, 0.0f);
+							int n = 0;
+							float zBest = BIGFLOAT;
 
-								if (material)
+							auto take_one_sample = [&](int s)
 								{
-									color = material->Shade(shadeInfo);
-									pixels[index] = Color24(ToByte(color.r), ToByte(color.g), ToByte(color.b));
-								}
-							}
-							else
+									// makes shiftx and shifty in [0.0f, 1.0f)
+									float sx = std::fmod(haltonX[s] + shiftX, 1.0f);
+									float sy = std::fmod(haltonY[s] + shiftY, 1.0f);
+
+									// makes range [0.0f, 1.0f) to [-1.0f, 1.0f)
+									float px = ((x + sx) / (float)width) * 2.0f - 1.0f;
+									float py = 1.0f - ((y + sy) / (float)height) * 2.0f;
+
+									Vec3f dir = (px * aspect * tanHalf) * camRight + (py * tanHalf) * camUp + camDir;
+									dir.Normalize();
+
+									Ray ray(camera.pos, dir);
+									HitInfo hInfo;
+									hInfo.Init();
+
+									Color sampleColor(0.0f, 0.0f, 0.0f);
+									bool hit = this->TraceRay(ray, hInfo, HIT_FRONT_AND_BACK);
+
+									if (hit)
+									{
+										if (hInfo.z < zBest)
+											zBest = hInfo.z;
+										const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
+										if (material)
+										{
+											MyShadeInfo shadeInfo(this, scene.lights, scene.environment, maxSpecularBounce);
+											shadeInfo.SetPixel(x, y);
+											shadeInfo.SetPixelSample(s);
+											shadeInfo.SetHit(ray, hInfo);
+											sampleColor = material->Shade(shadeInfo);
+										}
+									}
+									else
+									{
+										float u = (x + sx) / (float)width;
+										float v = (y + sy) / (float)height;
+										sampleColor = scene.background.Eval(Vec3f(u, v, 0.0f));
+									}
+									sampleTotal += sampleColor;
+									sampleTotalSquare += Color(sampleColor.r * sampleColor.r, sampleColor.g * sampleColor.g, sampleColor.b * sampleColor.b);
+									++n;
+								};
+
+							auto need_more_sample = [&]() -> bool
+								{
+									if (n < sppMin)
+										return true;
+									Color mean = sampleTotal / (float)n;
+
+									auto variance_per_channel = [&](float sampleSum, float sampleSumSquare) -> float
+										{
+											float variance = (sampleSumSquare - (sampleSum * sampleSum) / (float)n);
+											return (n > 1) ? std::max(0.0f, variance / (float)(n - 1)) : 0.0f;
+										};
+
+									float varianceR = variance_per_channel(sampleTotal.r, sampleTotalSquare.r);
+									float varianceG = variance_per_channel(sampleTotal.g, sampleTotalSquare.g);
+									float varianceB = variance_per_channel(sampleTotal.b, sampleTotalSquare.b);
+
+									float t = Ttest_approx(n);
+									auto delta_pass = [&](float variance) -> bool
+										{
+											float sigma = std::sqrt(variance);		// standard deviation
+											float delta = t * (sigma / std::sqrt((float)n));
+											return delta <= deltaTolerance;
+										};
+
+									return !(delta_pass(varianceR) && delta_pass(varianceG) && delta_pass(varianceB));
+								};
+
+							for (int s = 0; s < sppMin; ++s)
+								take_one_sample(s);
+
+							int s = sppMin;
+							while (s < sppMax && need_more_sample())
 							{
-								zBuffer[index] = BIGFLOAT;
-								//pixels[index] = Color24(0, 0, 0);		// Black for not hit
-								float u = (x + 0.5f) / float(width);
-								float v = (y + 0.5f) / float(height);
-								Color bg = scene.background.Eval(Vec3f(u, v, 0.0f));
-								pixels[index] = Color24(ToByte(bg.r), ToByte(bg.g), ToByte(bg.b));
+								take_one_sample(s);
+								++s;
 							}
+
+							Color color = sampleTotal / (float)n;
+							pixels[index] = Color24(ToByte(color.r), ToByte(color.g), ToByte(color.b));
+							zBuffer[index] = zBest;
+							if (sampleCount)
+								sampleCount[index] = n;
+
 							++claimed;
 						}
 					}
