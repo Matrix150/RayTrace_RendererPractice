@@ -2,8 +2,8 @@
 ///
 /// \file       scene.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    7.1
-/// \date       October 2, 2025
+/// \version    9.1
+/// \date       October 25, 2025
 ///
 /// \brief Project source for CS 6620 - University of Utah.
 ///
@@ -223,9 +223,11 @@ public:
 class Material : public ItemBase
 {
 public:
-	virtual Color Shade( ShadeInfo const &shadeInfo ) const=0;	// the main method that handles shading
-	virtual void SetViewportMaterial( int mtlID=0 ) const {}	// used for OpenGL display
-	virtual void Load( Loader const &loader, TextureFileList &textureFileList ) {}
+	virtual Color Shade( ShadeInfo const &sInfo ) const=0;	// the main method that handles shading
+	virtual Color Absorption         ( int mtlID=0 ) const { return Color(0,0,0); }	// returns the absorption of the material
+	virtual float IOR                ( int mtlID=0 ) const { return 1.0f; }	// returns the refraction index of the material
+	virtual void  SetViewportMaterial( int mtlID=0 ) const {}	// used for OpenGL display
+	virtual void  Load( Loader const &loader, TextureFileList &textureFileList ) {}
 };
 
 //-------------------------------------------------------------------------------
@@ -398,7 +400,7 @@ class Camera
 {
 public:
 	Vec3f pos, dir, up;
-	float fov;
+	float fov, focaldist, dof;
 	int imgWidth, imgHeight;
 
 	void Init()
@@ -407,6 +409,8 @@ public:
 		dir.Set(0,0,-1);
 		up .Set(0,1,0);
 		fov       = 40;
+		focaldist = 1;
+		dof       = 0;
 		imgWidth  = 1920;
 		imgHeight = 1080;
 	}

@@ -2,7 +2,7 @@
 ///
 /// \file       viewport.cpp 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    8.0
+/// \version    9.0
 /// \date       September 24, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
@@ -101,6 +101,12 @@ static GLuint    viewTexture;
 static bool      closeWhenDone;
 static GLint     maxLights;
 
+static int dofDrawCount = 0;
+static std::vector<Color>   dofImage;
+static std::vector<Color24> dofBuffer;
+
+#define MAX_DOF_DRAW	32
+
 MtlBlinn defaultMaterial;
 
 #define terminal_clear()      printf("\033[H\033[J")
@@ -166,6 +172,13 @@ void ShowViewport( Renderer *renderer, bool beginRendering )
 	glGetIntegerv(GL_MAX_LIGHTS, &maxLights);
 
 	glEnable(GL_NORMALIZE);
+
+	if ( camera.dof > 0 ) {
+		int numPixels = camera.imgWidth * camera.imgHeight;
+		dofBuffer.resize(numPixels);
+		dofImage.resize(numPixels);
+		memset( dofImage.data(), 0, numPixels*sizeof(Color) );
+	}
 
 	glGenTextures(1,&viewTexture);
 	glBindTexture(GL_TEXTURE_2D, viewTexture);
@@ -291,8 +304,14 @@ void DrawScene( bool flipped=false )
 
 	glPushMatrix();
 	Vec3f p = camera.pos;
-	Vec3f t = camera.pos + camera.dir;
+	Vec3f t = camera.pos + camera.dir*camera.focaldist;
 	Vec3f u = camera.up;
+	if ( camera.dof > 0 ) {
+		Vec3f v = camera.dir ^ camera.up;
+		float r = Sqrt(float(rand())/RAND_MAX)*camera.dof;
+		float a = Pi<float>() * 2.0f * float(rand())/RAND_MAX;
+		p += r*std::cos(a)*v + r*std::sin(a)*u;
+	}
 	gluLookAt( p.x, p.y, p.z,  t.x, t.y, t.z,  u.x, u.y, u.z );
 
 	int nLights = 1;
@@ -413,7 +432,27 @@ void GlutDisplay()
 
 	switch ( viewMode ) {
 	case VIEWMODE_OPENGL:
-		DrawScene();
+		if ( !dofImage.empty() ) {
+			if ( dofDrawCount < MAX_DOF_DRAW ) {
+				DrawScene();
+				glReadPixels( 0, 0, camera.imgWidth, camera.imgHeight, GL_RGB, GL_UNSIGNED_BYTE, dofBuffer.data() );
+				for ( int i=0, y=0; y<camera.imgHeight; y++ ) {
+					int j = (camera.imgHeight-y-1)*camera.imgWidth;
+					for ( int x=0; x<camera.imgWidth; x++, i++, j++ ) {
+						dofImage[i] = (dofImage[i]*float(dofDrawCount) + dofBuffer[j].ToColor())/float(dofDrawCount+1);
+					}
+				}
+				dofDrawCount++;
+			}
+			glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT );
+			DrawImage( dofImage.data(), GL_FLOAT, GL_RGB );
+			if ( dofDrawCount < MAX_DOF_DRAW ) {
+				DrawProgressBar(float(dofDrawCount)/MAX_DOF_DRAW,camera.imgHeight);
+				glutPostRedisplay();
+			}
+		} else {
+			DrawScene();
+		}
 		break;
 	case VIEWMODE_IMAGE:
 		DrawImage( renderImage.GetPixels(), GL_UNSIGNED_BYTE, GL_RGB );
@@ -609,8 +648,14 @@ void BeginRendering( int value )
 	mode = MODE_RENDERING;
 	viewMode = VIEWMODE_IMAGE;
 	glutSetWindowTitle(WINDOW_TITLE_IMAGE);
-	DrawScene(true);
-	glReadPixels( 0, 0, renderImage.GetWidth(), renderImage.GetHeight(), GL_RGB, GL_UNSIGNED_BYTE, renderImage.GetPixels() );
+	if ( dofImage.empty() ) {
+		DrawScene(true);
+		glReadPixels( 0, 0, renderImage.GetWidth(), renderImage.GetHeight(), GL_RGB, GL_UNSIGNED_BYTE, renderImage.GetPixels() );
+	} else {
+		Color24 *p = renderImage.GetPixels();
+		int numPixels = camera.imgWidth*camera.imgHeight;
+		for ( int i=0; i<numPixels; i++ ) p[i] = Color24(dofImage[i]);
+	}
 	startTime = (int) time(nullptr);
 	theRenderer->BeginRender();
 	closeWhenDone = value;

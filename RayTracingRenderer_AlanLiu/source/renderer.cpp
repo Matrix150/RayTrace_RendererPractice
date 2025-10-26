@@ -94,6 +94,35 @@ static inline void ConstructCameraBasis(const Camera& camera, Vec3f& camRight, V
 	camUp = camera.up.GetNormalized();		// Up
 }
 
+//
+static inline void ConcentricSampleDisk(float u1, float u2, float& dx, float& dy)
+{
+	// [0, 1) -> [-1, 1)
+	float sx = 2.0f * u1 - 1.0f;
+	float sy = 2.0f * u2 - 1.0f;
+
+	if (sx == 0.0f && sy == 0.0f)
+	{
+		dx = dy = 0.0f;
+		return;
+	}
+
+	float r, theta;
+	if (std::abs(sx) > std::abs(sy))
+	{
+		r = sx;
+		theta = float(Pi<float>() / 4.0f) * (sy / sx);
+	}
+	else
+	{
+		r = sy;
+		theta = float(Pi<float>() / 2.0f) - float(Pi<float>() / 4.0f) * (sx / sy);
+	}
+
+	dx = r * std::cos(theta);
+	dy = r * std::sin(theta);
+}
+
 
 
 //class Myrenderer;
@@ -261,10 +290,15 @@ void MyRenderer::BeginRender()
 	constexpr int maxSpecularBounce = 100;		// Set max bounce number
 
 	constexpr int sppMin = 4;		// sample per pixel
-	constexpr int sppMax = 64;
+	constexpr int sppMax = 256;
 	constexpr float deltaTolerance = 0.007f;
+	// Halton for pixel sample
 	HaltonSeq<sppMax> haltonX(2);
 	HaltonSeq<sppMax> haltonY(3);
+	// Halton for circle len smaple
+	HaltonSeq<sppMax> haltonLenU(5);
+	HaltonSeq<sppMax> haltonLenV(7);
+
 
 	// using T-test table
 	auto Ttest_approx = [](int n) -> float
@@ -362,26 +396,54 @@ void MyRenderer::BeginRender()
 
 							const float shiftX = rng.RandomFloat();
 							const float shiftY = rng.RandomFloat();
+							const float shiftLenU = rng.RandomFloat();
+							const float shiftLenV = rng.RandomFloat();
 
-							Color sampleTotal(0.0f, 0.0f, 0.0f);
-							Color sampleTotalSquare(0.0f, 0.0f, 0.0f);
+							Color sampleTotal(0.0f, 0.0f, 0.0f);		// S1
+							Color sampleTotalSquare(0.0f, 0.0f, 0.0f);		// S2
 							int n = 0;
 							float zBest = BIGFLOAT;
 
 							auto take_one_sample = [&](int s)
 								{
 									// makes shiftx and shifty in [0.0f, 1.0f)
+									// for pixel (using halton base (2, 3))
 									float sx = std::fmod(haltonX[s] + shiftX, 1.0f);
 									float sy = std::fmod(haltonY[s] + shiftY, 1.0f);
+									// for lens (using halton base (5, 7))
+									float lu = std::fmod(haltonLenU[s] + shiftLenU, 1.0f);
+									float lv = std::fmod(haltonLenV[s] + shiftLenV, 1.0f);
 
 									// makes range [0.0f, 1.0f) to [-1.0f, 1.0f)
 									float px = ((x + sx) / (float)width) * 2.0f - 1.0f;
 									float py = 1.0f - ((y + sy) / (float)height) * 2.0f;
 
-									Vec3f dir = (px * aspect * tanHalf) * camRight + (py * tanHalf) * camUp + camDir;
-									dir.Normalize();
+									Vec3f dirPin = (px * aspect * tanHalf) * camRight + (py * tanHalf) * camUp + camDir;
+									dirPin.Normalize();
+									Ray ray;
 
-									Ray ray(camera.pos, dir);
+									// Lens with depth of field
+									if (camera.dof > 0.0f && camera.focaldist > 0.0f)
+									{
+										float cosTheta = dirPin % camDir;	// dot
+										float tFocus = (cosTheta != 0.0f) ? (camera.focaldist / cosTheta) : camera.focaldist;
+										Vec3f PFocus = camera.pos + tFocus * dirPin;
+
+										// dick sample (lu ,lv) to (dx, dy)
+										float dx, dy;
+										ConcentricSampleDisk(lu, lv, dx, dy);
+
+										float lenRadius = 0.5f * camera.dof;
+										Vec3f PLen = camera.pos + (dx * lenRadius) * camRight + (dy * lenRadius) * camUp;
+										Vec3f dir = (PFocus - PLen).GetNormalized();
+										ray = Ray(PLen, dir);
+									}
+									else
+									{
+										// pin hole
+										ray = Ray(camera.pos, dirPin);
+									}
+
 									HitInfo hInfo;
 									hInfo.Init();
 
