@@ -2,8 +2,8 @@
 ///
 /// \file       renderer.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    8.0
-/// \date       September 24, 2025
+/// \version    10.0
+/// \date       October 25, 2025
 ///
 /// \brief Project source for CS 6620 - University of Utah.
 ///
@@ -20,6 +20,7 @@
 //-------------------------------------------------------------------------------
 
 #include "scene.h"
+#include "rng.h"
 
 #include "lodepng.h"
 
@@ -100,7 +101,7 @@ private:
 class ShadeInfo
 {
 public:
-	ShadeInfo( std::vector<Light*> const &lightList, TexturedColor const &environment ) : lights(lightList), env(environment) {}
+	ShadeInfo( std::vector<Light*> const &lightList, TexturedColor const &environment, RNG &r ) : lights(lightList), env(environment), rng(r) {}
 
 	virtual Vec3f P () const { return hInfo.p; }	// returns the shading position
 	virtual Vec3f V () const { return -ray.dir; }	// returns the view vector
@@ -115,8 +116,10 @@ public:
 	virtual int X() const { return pixelX; }	// returns the current pixel's x coordinate
 	virtual int Y() const { return pixelY; }	// returns the current pixel's y coordinate
 
-	virtual int          NumLights()       const { return (int)lights.size(); }	// returns the number of lights to be used during shading
-	virtual Light const* GetLight( int i ) const { return lights[i]; }			// returns the i^th light
+	virtual int  CurrentBounce     () const { return bounce; }	// returns the current bounce (zero for primary rays)
+	virtual int  CurrentPixelSample() const { return pSample; }	// returns the current pixel sample ID
+
+	virtual float IOR() const { return 1.0f; }	// outside refraction index
 
 	virtual int   MaterialID() const { return hInfo.mtlID; }	// returns the material ID
 	virtual Vec3f UVW       () const { return hInfo.uvw; }		// returns the texture coordinates
@@ -128,9 +131,10 @@ public:
 
 	virtual Color EvalEnvironment( Vec3f const &dir ) const { return env.EvalEnvironment(dir); };	// returns the environment color
 
+	virtual int          NumLights()       const { return (int)lights.size(); }	// returns the number of lights to be used during shading
+	virtual Light const* GetLight( int i ) const { return lights[i]; }			// returns the i^th light
+
 	virtual bool CanBounce() const { return false; }	// returns if an additional bounce is permitted
-	virtual int  CurrentSpecularBounce() const { return bounceS; }	// returns the current specular bounce (zero for primary rays)
-	virtual int  CurrentPixelSample   () const { return pSample; }	// returns the current pixel sample ID
 
 	// Traces a shadow ray and returns the visibility
 	virtual float TraceShadowRay( Ray   const &ray, float t_max=BIGFLOAT ) const { return 1.0f; }
@@ -139,8 +143,10 @@ public:
 	// Traces a ray and returns the shaded color at the hit point.
 	// It also sets t to the distance to the hit point, if a front is found.
 	// if a back hit is found, dist should be set to zero.
-	virtual Color TraceSecondaryRay( Ray   const &ray, float &dist ) const { dist=BIGFLOAT; return Color(0,0,0); }
-	virtual Color TraceSecondaryRay( Vec3f const &dir, float &dist ) const { return TraceSecondaryRay(Ray(P(),dir),dist); }
+	virtual Color TraceSecondaryRay( Ray   const &ray, float &dist, bool reflection=true ) const { dist=BIGFLOAT; return Color(0,0,0); }
+	virtual Color TraceSecondaryRay( Vec3f const &dir, float &dist, bool reflection=true ) const { return TraceSecondaryRay(Ray(P(),dir),dist,reflection); }
+
+	virtual float RandomFloat() const { return rng.RandomFloat(); }
 
 	void SetPixel( int x, int y ) { pixelX = x; pixelY = y; }
 
@@ -154,8 +160,6 @@ public:
 		ray.dir.Normalize();
 	}
 
-	void IncrementBounce() { bounceS++; }
-
 	void SetPixelSample( int i ) { pSample = i; }
 
 protected:
@@ -163,8 +167,10 @@ protected:
 	HitInfo hInfo;			// ht information
 	int     pixelX  = 0;	// current pixel's x coordinate
 	int     pixelY  = 0;	// current pixel's y coordinate
-	int     bounceS = 0;	// current specular bounce
+	int     bounce  = 0;	// current bounce
 	int     pSample = 0;	// current pixel sample
+
+	RNG &rng;	// random number generator
 
 	std::vector<Light*> const &lights;	// lights
 	TexturedColor       const &env;		// environment

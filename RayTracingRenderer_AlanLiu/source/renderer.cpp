@@ -131,16 +131,21 @@ static inline void ConcentricSampleDisk(float u1, float u2, float& dx, float& dy
 class MyShadeInfo : public ShadeInfo
 {
 public:
-	MyShadeInfo(const Renderer* renderer, const std::vector<Light*>& lights, const TexturedColor& environment,int maxBounce) : ShadeInfo(lights, environment), rendererPtr(renderer), maxSpecularBounce(maxBounce) {}
+	MyShadeInfo(const Renderer* renderer, const std::vector<Light*>& lights, const TexturedColor& environment, RNG& rng, int maxBounce) : ShadeInfo(lights, environment, rng), rendererPtr(renderer), maxSpecularBounce(maxBounce) {}
 
 	float TraceShadowRay(const Ray& ray, float t_max = BIGFLOAT) const override;
 
 	bool CanBounce() const override
 	{
-		return CurrentSpecularBounce() < maxSpecularBounce;
+		return CurrentBounce() < maxSpecularBounce;
 	}
 
-	Color TraceSecondaryRay(const Ray& ray, float& dist) const override;
+	Color TraceSecondaryRay(const Ray& ray, float& dist, bool reflection = true) const override;
+
+	void IncrementBounce() 
+	{ 
+		++bounce; 
+	}
 
 private:
 	const Renderer* rendererPtr = nullptr;
@@ -159,7 +164,7 @@ float MyShadeInfo::TraceShadowRay(const Ray& ray, float t_max) const
 	return rendererPtr->TraceShadowRay(r, t_max, HIT_FRONT_AND_BACK) ? 0.0f : 1.0f;		// 0.0f if hit, 1.0f if not hit
 }
 
-Color MyShadeInfo::TraceSecondaryRay(const Ray& ray, float& dist) const
+Color MyShadeInfo::TraceSecondaryRay(const Ray& ray, float& dist, bool reflection) const
 {
 	dist = BIGFLOAT;
 
@@ -182,10 +187,7 @@ Color MyShadeInfo::TraceSecondaryRay(const Ray& ray, float& dist) const
 	self->IncrementBounce();
 	self->SetHit(raySencondary, hInfo);
 
-	if (hInfo.front)
-		dist = hInfo.z;
-	else
-		dist = 0.0f;
+	dist = hInfo.front ? hInfo.z : 0.0f;
 
 	const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
 	if (!material)
@@ -220,6 +222,26 @@ private:
 bool MyRenderer::TraceRay(Ray const& ray, HitInfo& hInfo, int hitSide) const
 {
 	bool hit = IntersectNodeRecursive(scene.rootNode, ray, hInfo, hitSide);		// Call recursive function to get intersection
+
+	for (Light* light : scene.lights)
+	{
+		auto* pointlight = dynamic_cast<PointLight*>(light);
+		if (!pointlight || !pointlight->IsRenderable())
+			continue;
+
+		HitInfo hLight;
+		hLight.Init();
+
+		if (pointlight->IntersectRay(ray, hLight, hitSide))
+		{
+			if (!hit || hLight.z < hInfo.z)
+			{
+				hInfo = hLight;
+				hInfo.node = nullptr;
+				hit = true;
+			}
+		}
+	}
 
 	return hit;
 }
@@ -457,11 +479,15 @@ void MyRenderer::BeginRender()
 										const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
 										if (material)
 										{
-											MyShadeInfo shadeInfo(this, scene.lights, scene.environment, maxSpecularBounce);
-											shadeInfo.SetPixel(x, y);
-											shadeInfo.SetPixelSample(s);
-											shadeInfo.SetHit(ray, hInfo);
-											sampleColor = material->Shade(shadeInfo);
+											MyShadeInfo sInfo(this, scene.lights, scene.environment, rng, maxSpecularBounce);
+											sInfo.SetPixel(x, y);
+											sInfo.SetPixelSample(s);
+											sInfo.SetHit(ray, hInfo);
+											sampleColor = material->Shade(sInfo);
+										}
+										else
+										{
+											sampleColor = Color(1.0f, 1.0f, 1.0f);
 										}
 									}
 									else

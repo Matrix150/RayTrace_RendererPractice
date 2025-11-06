@@ -2,8 +2,8 @@
 ///
 /// \file       xmlload.cpp 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    9.0
-/// \date       October 2, 2025
+/// \version    10.0
+/// \date       September 19, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
 ///
@@ -232,6 +232,7 @@ void PointLight::Load( Loader const &loader )
 {
 	loader.Child("intensity").ReadColor( intensity );
 	loader.Child("position" ).ReadVec3f( position  );
+	loader.Child("size"     ).ReadFloat( size      );
 }
 
 //-------------------------------------------------------------------------------

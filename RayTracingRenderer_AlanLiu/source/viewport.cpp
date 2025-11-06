@@ -2,7 +2,7 @@
 ///
 /// \file       viewport.cpp 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    9.0
+/// \version    10.0
 /// \date       September 24, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
@@ -337,6 +337,15 @@ void DrawScene( bool flipped=false )
 
 	DrawNode( &scene.rootNode );
 
+	glDisable( GL_LIGHTING );
+	glDisable( GL_TEXTURE_2D );
+
+	for ( Light const *light : scene.lights ) {
+		if ( light->IsRenderable() ) {
+			light->ViewportDisplay(nullptr);
+		}
+	}
+
 	glPopMatrix();
 
 	if ( flipped ) {
@@ -347,8 +356,6 @@ void DrawScene( bool flipped=false )
 	}
 
 	glDisable( GL_DEPTH_TEST );
-	glDisable( GL_LIGHTING );
-	glDisable( GL_TEXTURE_2D );
 }
 
 //-------------------------------------------------------------------------------
@@ -736,6 +743,15 @@ void GenLight::SetViewportParam( int lightID, ColorA const &ambient, ColorA cons
 	glLightfv( GL_LIGHT0 + lightID, GL_DIFFUSE,  &intensity.r );
 	glLightfv( GL_LIGHT0 + lightID, GL_SPECULAR, &intensity.r );
 	glLightfv( GL_LIGHT0 + lightID, GL_POSITION, &pos.x );
+}
+void PointLight::ViewportDisplay( Material const *mtl ) const
+{
+	static GLUquadric *q = gluNewQuadric();
+	glColor3fv( &intensity.r );
+	glPushMatrix();
+	glTranslatef( position.x, position.y, position.z );
+	gluSphere(q,size,20,20);
+	glPopMatrix();
 }
 void SetDiffuseTextureMap( TextureMap const *dm )
 {

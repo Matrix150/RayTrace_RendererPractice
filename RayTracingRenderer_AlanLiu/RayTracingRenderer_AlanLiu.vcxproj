@@ -39,6 +39,7 @@
   <ItemGroup>
     <ClCompile Include="3rdparty\lodepng.cpp" />
     <ClCompile Include="3rdparty\tinyxml2.cpp" />
+    <ClCompile Include="source\lights.cpp" />
     <ClCompile Include="source\main.cpp" />
     <ClCompile Include="source\materials.cpp" />
     <ClCompile Include="source\objetcs.cpp" />

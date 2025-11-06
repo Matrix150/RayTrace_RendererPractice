@@ -2,8 +2,8 @@
 ///
 /// \file       lights.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    3.0
-/// \date       September 19, 2025
+/// \version    10.0
+/// \date       September 24, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
 ///
@@ -27,8 +27,8 @@ protected:
 class AmbientLight : public GenLight
 {
 public:
-	bool IsAmbient() const override { return true; }
 	Color Illuminate( ShadeInfo const &sInfo, Vec3f &dir ) const override { return intensity; }
+	bool IsAmbient() const override { return true; }
 	void SetViewportLight( int lightID ) const override { SetViewportParam(lightID,ColorA(intensity),ColorA(0.0f),Vec4f(0,0,0,1)); }
 	void Load( Loader const &loader ) override;
 protected:
@@ -53,12 +53,20 @@ protected:
 class PointLight : public GenLight
 {
 public:
-	Color Illuminate( ShadeInfo const &sInfo, Vec3f &dir ) const override { Vec3f d=position-sInfo.P(); dir=d.GetNormalized(); return intensity*sInfo.TraceShadowRay(d,1); }
+	Color Illuminate( ShadeInfo const &sInfo, Vec3f &dir ) const override;
+	Color Radiance  ( ShadeInfo const &sInfo ) const override { return intensity; }
+	bool IsRenderable() const override { return size > 0.0f; }
 	void SetViewportLight( int lightID ) const override { SetViewportParam(lightID,ColorA(0.0f),ColorA(intensity),Vec4f(position,1.0f)); }
 	void Load( Loader const &loader ) override;
+
+	bool IntersectRay( Ray const &ray, HitInfo &hInfo, int hitSide=HIT_FRONT ) const override;
+	Box  GetBoundBox() const override { return Box( position-size, position+size ); }	// empty box
+	void ViewportDisplay( Material const *mtl ) const override;	// used for OpenGL display
+
 protected:
 	Color intensity = Color(0,0,0);
 	Vec3f position  = Vec3f(0,0,0);
+	float size      = 0.0f;
 };
 
 //-------------------------------------------------------------------------------
