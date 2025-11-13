@@ -146,12 +146,14 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 		const float NdotL = std::max(0.0f, N % L);
 		if (NdotL > 0.0f)
 		{
+			const Color fd = diffuse * (1.0f / Pi<float>());
+			const Color fs = specular * ((glossiness + 2.0f) / (8.0f * Pi<float>()));
 			// Add diffuse
-			color += diffuse * lightColor * NdotL;
+			//color += diffuse * lightColor * NdotL;
 			Vec3f H = (L + V).GetNormalized();		// halfway vector H
 			const float NdotH = std::max(0.0f, N % H);
 			// Add Specular
-			color += specular * lightColor * std::pow(NdotH, glossiness);
+			color += lightColor * (fd * NdotL + fs * std::pow(NdotH, glossiness));
 		}
 	}
 
@@ -234,13 +236,18 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 			Color LrAccum(0.0f, 0.0f, 0.0f);
 			for (int s = 0; s < nSampleR; ++s)
 			{
-				float u1 = sInfo.RandomFloat();
-				float u2 = sInfo.RandomFloat();
-				Vec3f Rsample = SampleAroundAxis(Rdir, kExp, u1, u2);
+				Vec3f Rsample;
+				int guard = 0;
+				do
+				{
+					float u1 = sInfo.RandomFloat();
+					float u2 = sInfo.RandomFloat();
+					Rsample = SampleAroundAxis(Rdir, kExp, u1, u2);
+					++guard;
+				} while ((N % Rsample) <= 0.0f && guard < 16);
 
-				float NdotR = N % Rsample;
-				if (NdotR < 0.0f)
-					Rsample = (Rsample - 2.0f * NdotR * N).GetNormalized();
+				if (N % Rsample <= 0.0f)
+					Rsample = -Rsample;
 
 				Vec3f nOffsetR = sInfo.IsFront() ? N : -N;
 				Ray rRay(sInfo.P() + nOffsetR * kEps, Rsample);
