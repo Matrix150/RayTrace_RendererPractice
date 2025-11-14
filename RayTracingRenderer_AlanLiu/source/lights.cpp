@@ -15,6 +15,10 @@ Color PointLight::Illuminate(ShadeInfo const& sInfo, Vec3f& L) const
     Vec3f T = (N ^ L).GetNormalized();
     Vec3f B = (L ^ T).GetNormalized();
 
+    const float r = size;
+    if (dist <= r)
+        return Radiance(sInfo);
+
     auto RaySphereIntersect = [](const Vec3f& P, const Vec3f& dRay, const Vec3f& center, float r)->float
         {
             // a = 1.0f
@@ -32,9 +36,6 @@ Color PointLight::Illuminate(ShadeInfo const& sInfo, Vec3f& L) const
                 std::swap(t0, t1);
             return (t0 > 0.0f) ? t0 : ((t1 > 0.0f) ? t1 : -1.0f);
         };
-
-    const float r = size;
-    const bool nearTouch = ((dist * dist) <= ((r * r) * 1.0001f));
 
     constexpr int kBaseSample = 8;
     constexpr int kMaxSample = 128;
@@ -60,37 +61,27 @@ Color PointLight::Illuminate(ShadeInfo const& sInfo, Vec3f& L) const
             return sInfo.TraceShadowRay(Ray(sInfo.P(), dir), tMax) == 0.0f;
         };
 
+    float sinThetaMax = r / dist;
+    sinThetaMax = std::min(std::max(sinThetaMax, 0.0f), 1.0f);
+    float cosThetaMax = std::sqrt(std::max(0.0f, 1.0f - sinThetaMax * sinThetaMax));
+
     while (currentSample < sampleTarget)
     {
         int index = currentSample + HaltonCutoff;
         float u = frac(Halton(index + 1, 2) + shiftX);
         float v = frac(Halton(index + 1, 3) + shiftY);
 
+        float cosTheta = 1.0f - u * (1.0f - cosThetaMax);
+        float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
+        float phi = 2.0f * Pi<float>() * v;
+
+        Vec3f dRay = T * (sinTheta * std::cos(phi)) + B * (sinTheta * std::sin(phi)) + L * cosTheta;
+        float tHit = RaySphereIntersect(sInfo.P(), dRay, position, r);
         Vec3f samplePos;
-
-        if (!nearTouch)
-        {
-            float rho = (dist * r) / std::sqrt(std::max((dist * dist) - (r * r), 1e-12f));
-            float rr = rho * std::sqrt(u);
-            float phi = 2.0f * Pi<float>() * v;
-            Vec3f Splane = position + T * (rr * std::cos(phi)) + B * (rr * std::sin(phi));
-
-            Vec3f dRay = (Splane - sInfo.P()).GetNormalized();
-            float tHit = RaySphereIntersect(sInfo.P(), dRay, position, r);
-            if (tHit > 0.0f)
-                samplePos = sInfo.P() + dRay * tHit;
-            else
-                samplePos = position;
-        }
+        if (tHit > 0.0f)
+            samplePos = sInfo.P() + dRay * tHit;
         else
-        {
-            float u1 = u, u2 = v;
-            float z = 1.0f - 2.0f * u1;
-            float t = std::sqrt(std::max(0.0f, (1.0f - z * z)));
-            float ph = 2.0f * Pi<float>() * u2;
-            Vec3f onUnit = Vec3f(t * std::cos(ph), t * std::sin(ph), z);
-            samplePos = position + onUnit * r;
-        }
+            samplePos = position;
 
         if (isOccluded(samplePos))
             ++shadowCount;

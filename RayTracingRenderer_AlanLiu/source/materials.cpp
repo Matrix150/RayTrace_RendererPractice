@@ -46,25 +46,17 @@ static inline Color Absorb(Color const& sigma, float dist)
 	return Color(std::expf(-sigma.r * dist), std::expf(-sigma.g * dist), std::expf(-sigma.b * dist));
 }
 
-static inline float GlossinessToLobeExponent(float glossiness)
-{
-	float g = std::max(1.0f, glossiness);
-	return std::min(g, 8192.0f);
-}
-
-static inline Vec3f SampleAroundAxis(const Vec3f& idealDir, float exponentK, float u1, float u2)
+static inline Vec3f SampleAroundAxis(const Vec3f& idealDir, float alpha, float u1, float u2)
 {
 	float phi = 2.0f * Pi<float>() * u2;
-	float cosTheta = std::pow(1.0f - u1, 1.0f / (exponentK + 1.0f));
+	float cosTheta = std::pow(u1, 1.0f / (alpha + 1.0f));
 	float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
 
-	Vec3f T, B;
 	Vec3f N = (std::fabs(idealDir.z) < 0.999f) ? Vec3f(0.0f, 0.0f, 1.0f) : Vec3f(0.0f, 1.0f, 0.0f);
-	T = (N ^ idealDir).GetNormalized();
-	B = (idealDir ^ T).GetNormalized();
+	Vec3f T = (N ^ idealDir).GetNormalized();
+	Vec3f B = (idealDir ^ T).GetNormalized();
 
-	Vec3f local(sinTheta * std::cos(phi), sinTheta * std::sin(phi), cosTheta);
-	Vec3f w = (T * local.x + B * local.y + idealDir * local.z).GetNormalized();
+	Vec3f w = (T * (sinTheta * std::cos(phi)) + B * (sinTheta * std::sin(phi)) + idealDir * cosTheta).GetNormalized();
 	return w;
 }
 
@@ -160,7 +152,6 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 	if (sInfo.CanBounce())
 	{
 		constexpr float kEps = 1e-4f;
-		const float kExp = GlossinessToLobeExponent(glossiness);
 
 		const Color kr = sInfo.Eval(Reflection());
 		const Color kt = sInfo.Eval(Refraction());
@@ -182,46 +173,48 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 		float eta = 1.0f;
 		bool refractionDone = false;
 
-		if (hasKt)
-			refractionDone = Refract(V, N, sInfo.IsFront(), ior, Tdir, cosi, eta);
-
-
-		// Refraction
-		if (hasKt && refractionDone)
+		if (hasKt && refractionWeight > 0.0f)
 		{
-			const bool entering = (nIn < nOut);		// Air into object
-			Vec3f nOffset = entering ? (-N) : N;
-
-			int nSampleT = 1;
-			if (glossiness < 8.0f)
-				nSampleT = 16;
-			else if (glossiness < 32.0f)
-				nSampleT = 8;
-			else if (glossiness < 128.0f)
-				nSampleT = 4;
-
-			Color LtAccum(0.0f, 0.0f, 0.0f);
-			for (int s = 0; s < nSampleT; ++s)
+			refractionDone = Refract(V, N, sInfo.IsFront(), ior, Tdir, cosi, eta);
+			// Refraction
+			if (refractionDone)
 			{
-				float u1 = sInfo.RandomFloat();
-				float u2 = sInfo.RandomFloat();
-				Vec3f Tsample = SampleAroundAxis(Tdir, kExp, u1, u2);
+				const bool entering = (nIn < nOut);		// Air into object
+				Vec3f nOffset = entering ? (-N) : N;
 
-				Ray tRay(sInfo.P() + nOffset * kEps, Tsample);
-				float distT = BIGFLOAT;
-				Color Lt = sInfo.TraceSecondaryRay(tRay, distT, false);
+				int nSampleT = 1;
+				if (glossiness < 8.0f)
+					nSampleT = 16;
+				else if (glossiness < 32.0f)
+					nSampleT = 8;
+				else if (glossiness < 128.0f)
+					nSampleT = 4;
 
-				if (entering)
-					Lt *= Absorb(sigma, distT);
-				LtAccum += Lt;
+				Color LtAccum(0.0f, 0.0f, 0.0f);
+				for (int s = 0; s < nSampleT; ++s)
+				{
+					float u1 = sInfo.RandomFloat();
+					float u2 = sInfo.RandomFloat();
+					Vec3f Tsample = SampleAroundAxis(Tdir, glossiness, u1, u2);
+
+					Ray tRay(sInfo.P() + nOffset * kEps, Tsample);
+					float distT = BIGFLOAT;
+					Color Lt = sInfo.TraceSecondaryRay(tRay, distT, false);
+
+					if (entering)
+						Lt *= Absorb(sigma, distT);
+					LtAccum += Lt;
+				}
+				LtAccum /= (float)nSampleT;
+
+				color += kt * refractionWeight * LtAccum;
 			}
-			LtAccum /= (float)nSampleT;
-
-			color += kt * refractionWeight * LtAccum;
 		}
 
+
+
 		// Reflection or Total internal Refraction
-		if (hasKr)
+		if (hasKr && reflectionWeight > 0.0f)
 		{
 			Vec3f Rdir = Reflect(V, N).GetNormalized();
 
@@ -238,16 +231,17 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 			{
 				Vec3f Rsample;
 				int guard = 0;
+
 				do
 				{
 					float u1 = sInfo.RandomFloat();
 					float u2 = sInfo.RandomFloat();
-					Rsample = SampleAroundAxis(Rdir, kExp, u1, u2);
+					Rsample = SampleAroundAxis(Rdir, glossiness, u1, u2);
 					++guard;
 				} while ((N % Rsample) <= 0.0f && guard < 16);
 
 				if (N % Rsample <= 0.0f)
-					Rsample = -Rsample;
+					continue;
 
 				Vec3f nOffsetR = sInfo.IsFront() ? N : -N;
 				Ray rRay(sInfo.P() + nOffsetR * kEps, Rsample);
