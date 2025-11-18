@@ -8,10 +8,17 @@
 // Transform from Color(0, 1) to Color24 (0, 255)
 inline unsigned char ToByte(float x)
 {
-	x = x * 255.0f;
 	if (x < 0.0f)
 		x = 0.0f;
-	else if (x > 255.0f)
+	else if (x > 1.0f)
+		x = 1.0f;
+	// Gamma corrent
+	const float invGamma = 1.0f / 2.2f;
+	x = std::pow(x, invGamma);
+	x *= 255.0f;
+	if (x < 0.0f) 
+		x = 0.0f;
+	else if (x > 255.0f) 
 		x = 255.0f;
 	return static_cast<unsigned char>(x + 0.5f);
 }

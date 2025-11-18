@@ -95,7 +95,15 @@ Color PointLight::Illuminate(ShadeInfo const& sInfo, Vec3f& L) const
     }
 
     float visibility = 1.0f - (float)shadowCount / (float)currentSample;
-    return visibility * Radiance(sInfo);
+    Color Lout = visibility * Radiance(sInfo);
+
+    if (attenuation > 0.0f)
+    {
+        float d = dist * attenuation;
+        float invSq = 1.0f / std::max(d * d, 1e-6f);
+        Lout *= invSq;
+    }
+    return Lout;
 }
 
 bool PointLight::IntersectRay(Ray const& ray, HitInfo& hInfo, int hitSide) const

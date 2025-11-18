@@ -2,7 +2,7 @@
 ///
 /// \file       xmlload.cpp 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    10.0
+/// \version    11.0
 /// \date       September 19, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
@@ -116,6 +116,7 @@ void Camera::Load( Loader const &loader )
 	dir.Normalize();
 	Vec3f x = dir ^ up;
 	up = (x ^ dir).GetNormalized();
+	sRGB = ( loader.Attribute("gamma") == "sRGB" );
 }
 
 //-------------------------------------------------------------------------------
@@ -230,9 +231,10 @@ void DirectLight::Load( Loader const &loader )
 
 void PointLight::Load( Loader const &loader )
 {
-	loader.Child("intensity").ReadColor( intensity );
-	loader.Child("position" ).ReadVec3f( position  );
-	loader.Child("size"     ).ReadFloat( size      );
+	loader.Child("intensity"  ).ReadColor( intensity   );
+	loader.Child("position"   ).ReadVec3f( position    );
+	loader.Child("size"       ).ReadFloat( size        );
+	loader.Child("attenuation").ReadFloat( attenuation );
 }
 
 //-------------------------------------------------------------------------------
@@ -262,6 +264,7 @@ void MtlBasePhongBlinn::Load( Loader const &loader, TextureFileList &tfl )
 	loader.Child("diffuse"   ).ReadTexturedColor( diffuse,    tfl );
 	loader.Child("specular"  ).ReadTexturedColor( specular,   tfl );
 	loader.Child("glossiness").ReadTexturedFloat( glossiness, tfl );
+	loader.Child("emission"  ).ReadTexturedColor( emission,   tfl );
 	loader.Child("reflection").ReadTexturedColor( reflection, tfl );
 	loader.Child("refraction").ReadTexturedColor( refraction, tfl );
 	loader.Child("refraction").ReadFloat( ior, "index" );
@@ -275,6 +278,7 @@ void MtlMicrofacet::Load( Loader const &loader, TextureFileList &tfl )
 	loader.Child("color"        ).ReadTexturedColor( baseColor,     tfl );
 	loader.Child("roughness"    ).ReadTexturedFloat( roughness,     tfl );
 	loader.Child("metallic"     ).ReadTexturedFloat( metallic,      tfl );
+	loader.Child("emission"     ).ReadTexturedColor( emission,      tfl );
 	loader.Child("transmittance").ReadTexturedColor( transmittance, tfl );
 	loader.Child("ior"          ).ReadFloat( ior        );
 	loader.Child("absorption"   ).ReadColor( absorption );
