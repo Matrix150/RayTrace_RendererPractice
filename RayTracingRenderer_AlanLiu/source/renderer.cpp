@@ -6,15 +6,18 @@
 
 
 // Transform from Color(0, 1) to Color24 (0, 255)
-inline unsigned char ToByte(float x)
+inline unsigned char ToByte(float x, bool applyGamma)
 {
 	if (x < 0.0f)
 		x = 0.0f;
 	else if (x > 1.0f)
 		x = 1.0f;
 	// Gamma corrent
-	const float invGamma = 1.0f / 2.2f;
-	x = std::pow(x, invGamma);
+	if (applyGamma)
+	{
+		const float invGamma = 1.0f / 2.2f;
+		x = std::pow(x, invGamma);
+	}
 	x *= 255.0f;
 	if (x < 0.0f) 
 		x = 0.0f;
@@ -181,7 +184,7 @@ Color MyShadeInfo::TraceSecondaryRay(const Ray& ray, float& dist, bool reflectio
 
 	// Check if can bounce
 	if (!CanBounce())
-		return env.EvalEnvironment(dir);
+		return Color(0.0f, 0.0f, 0.0f);
 
 	HitInfo hInfo;
 	hInfo.Init();
@@ -198,7 +201,9 @@ Color MyShadeInfo::TraceSecondaryRay(const Ray& ray, float& dist, bool reflectio
 
 	const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
 	if (!material)
-		return Color(0.0f, 0.0f, 0.0f);
+	{
+		return env.EvalEnvironment(dir);
+	}
 
 	return material->Shade(*self);
 }
@@ -546,7 +551,9 @@ void MyRenderer::BeginRender()
 							}
 
 							Color color = sampleTotal / (float)n;
-							pixels[index] = Color24(ToByte(color.r), ToByte(color.g), ToByte(color.b));
+							color.Clamp();
+							bool applyGamma = camera.sRGB;
+							pixels[index] = Color24(ToByte(color.r, applyGamma), ToByte(color.g, applyGamma), ToByte(color.b, applyGamma));
 							zBuffer[index] = zBest;
 							if (sampleCount)
 								sampleCount[index] = n;

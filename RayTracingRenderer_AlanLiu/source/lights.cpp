@@ -95,7 +95,7 @@ Color PointLight::Illuminate(ShadeInfo const& sInfo, Vec3f& L) const
     }
 
     float visibility = 1.0f - (float)shadowCount / (float)currentSample;
-    Color Lout = visibility * Radiance(sInfo);
+    Color Lout = visibility * intensity;
 
     if (attenuation > 0.0f)
     {

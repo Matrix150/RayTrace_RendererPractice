@@ -82,14 +82,15 @@ static Vec3f SampleHemisphereUniform(const Vec3f& N, float u1, float u2, float& 
 
 static Vec3f SampleHemisphereCosine(const Vec3f& N, float u1, float u2, float& pdf)
 {
-	float r = std::sqrt(u1);
-	float theta = 2.0f * Pi<float>() * u2;
+	float cosTheta = std::sqrt(1.0f - u1);
+	float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
+	float phi = 2.0f * Pi<float>() * u2;
 	
 	Vec3f T, B;
 	BuildTBN(N, T, B);
-	Vec3f w = (T * (r * std::cos(theta)) + B * (r * std::sin(theta)) + N * std::sqrt(std::max(0.0f, 1.0f - u1))).GetNormalized();
+	Vec3f w = (T * (sinTheta * std::cos(phi)) + B * (sinTheta * std::sin(phi)) + N * cosTheta).GetNormalized();
 
-	pdf = std::sqrt(std::max(0.0f, 1.0f - u1)) / Pi<float>();
+	pdf = cosTheta / Pi<float>();
 	return w;
 }
 
@@ -136,7 +137,7 @@ Color MtlPhong::Shade(ShadeInfo const& shadeInfo) const
 	}
 
 	// Saturate the color
-	color.Clamp();
+	//color.Clamp();
 
 	return color;
 }
@@ -155,13 +156,11 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 
 	// Energy-conserving
 	Color ks = specularTex;
-	ks.Clamp();
-
+	//ks.Clamp();
 	float ksMax = std::max(ks.r, std::max(ks.g, ks.b));
 	ksMax = std::min(ksMax, 1.0f);
 	float kdScale = std::max(0.0f, 1.0f - ksMax);
 	Color kd = diffuseTex * kdScale;
-
 
 	const int lightNum = sInfo.NumLights();	// Light numbers
 	// Loop all lights
@@ -187,20 +186,19 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 			// Blinn-Phong specular
 			Vec3f H = (L + V).GetNormalized();		// halfway vector H
 			const float NdotH = std::max(0.0f, N % H);
-			// Normalize
-			const float norm = (glossiness + 8.0f) / (8.0f * Pi<float>());
-			const float specTerm = norm * std::pow(NdotH, glossiness) * NdotL;
-
-			color += ks * lightColor * specTerm;
+			//const float norm = (glossiness + 8.0f) / (8.0f * Pi<float>());
+			//const float specTerm = norm * std::pow(NdotH, glossiness) * NdotL;
+			color += ks * lightColor *std::pow(NdotH, glossiness) * NdotL;
 		}
 	}
 
 	// Inderect diffuse Illumination (Monte Carlo single bounce)
-	if (sInfo.CurrentBounce() == 0 && sInfo.CanBounce())
+	if (sInfo.CanBounce())
 	{
 		Color indirect(0.0f, 0.0f, 0.0f);
 
-		for (int i = 0; i < 64; ++i)
+		const int numSample = 32;
+		for (int i = 0; i < numSample; ++i)
 		{
 			float u1 = sInfo.RandomFloat();
 			float u2 = sInfo.RandomFloat();
@@ -215,11 +213,11 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 			float dist = BIGFLOAT;
 
 			Color giDiffuse = sInfo.TraceSecondaryRay(giRay, dist, false);
-			Color brdf = kd * (1.0f / Pi<float>());
-			indirect += brdf * giDiffuse * (NdotWi / pdf);
+			//Color brdf = kd * (1.0f / Pi<float>());
+			indirect += giDiffuse;
 		}
 
-		indirect /= 64.0f;
+		indirect /= (float)numSample;
 		color += indirect;
 	}
 
@@ -332,7 +330,7 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 	color += sInfo.Eval(Emission());
 
 	// Saturate the color
-	color.Clamp();
+	//color.Clamp();
 
 	return color;
 }
