@@ -147,6 +147,8 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 {
 	const Vec3f N = sInfo.N().GetNormalized();		// Normal
 	const Vec3f V = sInfo.V().GetNormalized();		// Viewing
+	const Vec3f P = sInfo.P();
+	const bool front = sInfo.IsFront();
 	Color color(0.0f, 0.0f, 0.0f);
 
 	// Texture
@@ -154,9 +156,15 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 	const Color specularTex = sInfo.Eval(Specular());
 	const float glossiness = sInfo.Eval(Glossiness());
 
+	// Reflection & Refraction
+	const Color kr = sInfo.Eval(Reflection());
+	const Color kt = sInfo.Eval(Refraction());
+	const bool hasKt = (kt.r > 0.0f || kt.g > 0.0f || kt.b > 0.0f);
+	const bool hasKr = (kr.r > 0.0f || kr.g > 0.0f || kr.b > 0.0f) || hasKt;
+
 	// Energy-conserving
 	Color ks = specularTex;
-	//ks.Clamp();
+	ks.Clamp();
 	float ksMax = std::max(ks.r, std::max(ks.g, ks.b));
 	ksMax = std::min(ksMax, 1.0f);
 	float kdScale = std::max(0.0f, 1.0f - ksMax);
@@ -182,60 +190,64 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 		if (NdotL > 0.0f)
 		{
 			// Diffuse
-			color += kd * lightColor * NdotL;
+			color += kd * lightColor * (NdotL / Pi<float>());
 			// Blinn-Phong specular
-			Vec3f H = (L + V).GetNormalized();		// halfway vector H
-			const float NdotH = std::max(0.0f, N % H);
-			//const float norm = (glossiness + 8.0f) / (8.0f * Pi<float>());
-			//const float specTerm = norm * std::pow(NdotH, glossiness) * NdotL;
-			color += ks * lightColor *std::pow(NdotH, glossiness) * NdotL;
+			if (!hasKr && !hasKt)
+			{
+				Vec3f H = (L + V).GetNormalized();		// halfway vector H
+				const float NdotH = std::max(0.0f, N % H);
+				const float specNorm = (glossiness + 2.0f) / (8.0f * Pi<float>());
+				const float specular = specNorm * std::pow(NdotH, glossiness);
+				color += ks * lightColor * specular;
+			}
 		}
 	}
 
-	// Inderect diffuse Illumination (Monte Carlo single bounce)
-	if (sInfo.CanBounce())
+	const bool canBounce = sInfo.CanBounce();
+	// Inderect diffuse Global Illumination (Monte Carlo)
+	if (canBounce && sInfo.CurrentBounce() <= 1)
 	{
 		Color indirect(0.0f, 0.0f, 0.0f);
-
 		const int numSample = 32;
+		const float shift1 = sInfo.RandomFloat();
+		const float shift2 = sInfo.RandomFloat();
+		constexpr int haltonOffset = 7;
+
+		auto frac = [](float x) {return x - std::floor(x); };
+
 		for (int i = 0; i < numSample; ++i)
 		{
-			float u1 = sInfo.RandomFloat();
-			float u2 = sInfo.RandomFloat();
+			int index = i + haltonOffset;
+			float u1 = frac(Halton(index + 1, 2) + shift1);
+			float u2 = frac(Halton(index + 1, 3) + shift2);
 			float pdf = 0.0f;
 			Vec3f wi = SampleHemisphereCosine(N, u1, u2, pdf);
 
 			const float NdotWi = std::max(0.0f, N % wi);
-			if (NdotWi <= 0.0f)
+			if (NdotWi <= 0.0f || pdf <= 0)
 				continue;
 
-			Ray giRay(sInfo.P() + N * 1e-4f, wi);
+			Ray giRay(P + N * 1e-4f, wi);
 			float dist = BIGFLOAT;
 
 			Color giDiffuse = sInfo.TraceSecondaryRay(giRay, dist, false);
-			//Color brdf = kd * (1.0f / Pi<float>());
-			indirect += giDiffuse;
+			Color brdf = kd * (1.0f / Pi<float>());
+			indirect += brdf * giDiffuse * (NdotWi / pdf);
 		}
 
-		indirect /= (float)numSample;
+		indirect /= static_cast<float>(numSample);
 		color += indirect;
 	}
 
 	// Specular & Transmission
-	if (sInfo.CanBounce())
+	if (canBounce)
 	{
 		constexpr float kEps = 1e-4f;
-
-		const Color kr = sInfo.Eval(Reflection());
-		const Color kt = sInfo.Eval(Refraction());
 		const Color sigma = Absorption();
 		const float ior = IOR();
 
-		const bool hasKt = (kt.r > 0.0f || kt.g > 0.0f || kt.b > 0.0f);
-		const bool hasKr = (kr.r > 0.0f || kr.g > 0.0f || kr.b > 0.0f) || hasKt;
-
-		const float nIn = sInfo.IsFront() ? 1.0f : ior;
-		const float	nOut =sInfo.IsFront() ? ior : 1.0f;
+		const float nIn = front ? 1.0f : ior;
+		const float	nOut = front ? ior : 1.0f;
 		float cosi = std::fabs(N % V);
 		const float F = FresnelSchlick(cosi, nIn, nOut);
 
@@ -246,9 +258,19 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 		float eta = 1.0f;
 		bool refractionDone = false;
 
+		auto frac = [](float x) {return x - std::floor(x); };
+
+		const float refrShift1 = sInfo.RandomFloat();
+		const float refrShift2 = sInfo.RandomFloat();
+		constexpr int refrHaltonOffset = 23;
+		const float reflShift1 = sInfo.RandomFloat();
+		const float reflShift2 = sInfo.RandomFloat();
+		constexpr int reflHaltonOffset = 47;
+
+
 		if (hasKt && refractionWeight > 0.0f)
 		{
-			refractionDone = Refract(V, N, sInfo.IsFront(), ior, Tdir, cosi, eta);
+			refractionDone = Refract(V, N, front, ior, Tdir, cosi, eta);
 			// Refraction
 			if (refractionDone)
 			{
@@ -266,11 +288,12 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 				Color LtAccum(0.0f, 0.0f, 0.0f);
 				for (int s = 0; s < nSampleT; ++s)
 				{
-					float u1 = sInfo.RandomFloat();
-					float u2 = sInfo.RandomFloat();
+					int index = s + refrHaltonOffset;
+					float u1 = frac(Halton(index + 1, 2) + refrShift1);
+					float u2 = frac(Halton(index + 1, 3) + refrShift2);
 					Vec3f Tsample = SampleAroundAxis(Tdir, glossiness, u1, u2);
 
-					Ray tRay(sInfo.P() + nOffset * kEps, Tsample);
+					Ray tRay(P + nOffset * kEps, Tsample);
 					float distT = BIGFLOAT;
 					Color Lt = sInfo.TraceSecondaryRay(tRay, distT, false);
 
@@ -305,8 +328,9 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 
 				do
 				{
-					float u1 = sInfo.RandomFloat();
-					float u2 = sInfo.RandomFloat();
+					int index = s + reflHaltonOffset;
+					float u1 = frac(Halton(index + 1, 2) + reflShift1);
+					float u2 = frac(Halton(index + 1, 3) + reflShift2);
 					Rsample = SampleAroundAxis(Rdir, glossiness, u1, u2);
 					++guard;
 				} while ((N % Rsample) <= 0.0f && guard < 16);
@@ -314,8 +338,8 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 				if (N % Rsample <= 0.0f)
 					continue;
 
-				Vec3f nOffsetR = sInfo.IsFront() ? N : -N;
-				Ray rRay(sInfo.P() + nOffsetR * kEps, Rsample);
+				Vec3f nOffsetR = front ? N : -N;
+				Ray rRay(P + nOffsetR * kEps, Rsample);
 				float distR = BIGFLOAT;
 				Color Lr = sInfo.TraceSecondaryRay(rRay, distR, true);
 

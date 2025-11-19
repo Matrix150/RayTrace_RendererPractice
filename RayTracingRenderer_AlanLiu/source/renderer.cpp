@@ -193,19 +193,25 @@ Color MyShadeInfo::TraceSecondaryRay(const Ray& ray, float& dist, bool reflectio
 	if (!rendererPtr->TraceRay(raySencondary, hInfo, HIT_FRONT_AND_BACK))
 		return env.EvalEnvironment(dir);
 
-	MyShadeInfo* self = const_cast<MyShadeInfo*>(this);
-	self->IncrementBounce();
-	self->SetHit(raySencondary, hInfo);
-
+	//MyShadeInfo* self = const_cast<MyShadeInfo*>(this);
+	//self->IncrementBounce();
+	//self->SetHit(raySencondary, hInfo);
 	dist = hInfo.front ? hInfo.z : 0.0f;
 
 	const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
-	if (!material)
+	if (material)
 	{
-		return env.EvalEnvironment(dir);
+		MyShadeInfo child(*this);
+		child.IncrementBounce();
+		child.SetHit(raySencondary, hInfo);
+		return material->Shade(child);
 	}
 
-	return material->Shade(*self);
+	/*if (hInfo.node)
+		if (const Light* light = dynamic_cast<const Light*>(hInfo.node))
+			return light->Radiance(*self);*/
+	
+	return env.EvalEnvironment(dir);
 }
 
 
@@ -321,10 +327,10 @@ void MyRenderer::BeginRender()
 	workers.clear();
 	workers.reserve(T);
 
-	constexpr int maxSpecularBounce = 100;		// Set max bounce number
+	constexpr int maxSpecularBounce = 3;		// Set max bounce number
 
 	constexpr int sppMin = 4;		// sample per pixel
-	constexpr int sppMax = 256;
+	constexpr int sppMax = 64;
 	constexpr float deltaTolerance = 0.007f;
 	// Halton for pixel sample
 	HaltonSeq<sppMax> haltonX(2);
@@ -551,7 +557,7 @@ void MyRenderer::BeginRender()
 							}
 
 							Color color = sampleTotal / (float)n;
-							color.Clamp();
+							//color.Clamp();
 							bool applyGamma = camera.sRGB;
 							pixels[index] = Color24(ToByte(color.r, applyGamma), ToByte(color.g, applyGamma), ToByte(color.b, applyGamma));
 							zBuffer[index] = zBest;

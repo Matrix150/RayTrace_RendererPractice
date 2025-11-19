@@ -17,7 +17,7 @@ Color PointLight::Illuminate(ShadeInfo const& sInfo, Vec3f& L) const
 
     const float r = size;
     if (dist <= r)
-        return Radiance(sInfo);
+        return intensity;
 
     auto RaySphereIntersect = [](const Vec3f& P, const Vec3f& dRay, const Vec3f& center, float r)->float
         {
