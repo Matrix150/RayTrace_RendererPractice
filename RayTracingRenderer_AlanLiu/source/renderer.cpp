@@ -207,9 +207,9 @@ Color MyShadeInfo::TraceSecondaryRay(const Ray& ray, float& dist, bool reflectio
 		return material->Shade(child);
 	}
 
-	/*if (hInfo.node)
+	if (hInfo.node)
 		if (const Light* light = dynamic_cast<const Light*>(hInfo.node))
-			return light->Radiance(*self);*/
+			return light->Radiance(*this);
 	
 	return env.EvalEnvironment(dir);
 }
@@ -327,7 +327,7 @@ void MyRenderer::BeginRender()
 	workers.clear();
 	workers.reserve(T);
 
-	constexpr int maxSpecularBounce = 3;		// Set max bounce number
+	constexpr int maxSpecularBounce = 5;		// Set max bounce number
 
 	constexpr int sppMin = 4;		// sample per pixel
 	constexpr int sppMax = 64;

@@ -152,8 +152,8 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 	Color color(0.0f, 0.0f, 0.0f);
 
 	// Texture
-	const Color diffuseTex = sInfo.Eval(Diffuse());
-	const Color specularTex = sInfo.Eval(Specular());
+	Color diffuseTex = sInfo.Eval(Diffuse());
+	Color specularTex = sInfo.Eval(Specular());
 	const float glossiness = sInfo.Eval(Glossiness());
 
 	// Reflection & Refraction
@@ -163,12 +163,22 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 	const bool hasKr = (kr.r > 0.0f || kr.g > 0.0f || kr.b > 0.0f) || hasKt;
 
 	// Energy-conserving
+	auto normalizeChannel = [](float& kd_c, float& ks_c)
+		{
+			float sum = kd_c + ks_c;
+			if (sum > 1.0f)
+			{
+				float inv = 1.0f / sum;
+				kd_c *= inv;
+				ks_c *= inv;
+			}
+		};
+
+	normalizeChannel(diffuseTex.r, specularTex.r);
+	normalizeChannel(diffuseTex.g, specularTex.g);
+	normalizeChannel(diffuseTex.b, specularTex.b);
+	Color kd = diffuseTex;
 	Color ks = specularTex;
-	ks.Clamp();
-	float ksMax = std::max(ks.r, std::max(ks.g, ks.b));
-	ksMax = std::min(ksMax, 1.0f);
-	float kdScale = std::max(0.0f, 1.0f - ksMax);
-	Color kd = diffuseTex * kdScale;
 
 	const int lightNum = sInfo.NumLights();	// Light numbers
 	// Loop all lights
@@ -205,10 +215,10 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 
 	const bool canBounce = sInfo.CanBounce();
 	// Inderect diffuse Global Illumination (Monte Carlo)
-	if (canBounce && sInfo.CurrentBounce() <= 1)
+	if (canBounce && sInfo.CurrentBounce() <= 2)
 	{
 		Color indirect(0.0f, 0.0f, 0.0f);
-		const int numSample = 32;
+		const int numSample = 8;
 		const float shift1 = sInfo.RandomFloat();
 		const float shift2 = sInfo.RandomFloat();
 		constexpr int haltonOffset = 7;

@@ -38,7 +38,7 @@ Color PointLight::Illuminate(ShadeInfo const& sInfo, Vec3f& L) const
         };
 
     constexpr int kBaseSample = 8;
-    constexpr int kMaxSample = 128;
+    constexpr int kMaxSample = 64;
     constexpr int HaltonCutoff = 7;
     int sampleTarget = kBaseSample;
     int currentSample = 0;
