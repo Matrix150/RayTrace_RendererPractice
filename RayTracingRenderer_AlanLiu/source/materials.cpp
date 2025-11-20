@@ -202,14 +202,11 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 			// Diffuse
 			color += kd * lightColor * (NdotL / Pi<float>());
 			// Blinn-Phong specular
-			if (!hasKr && !hasKt)
-			{
-				Vec3f H = (L + V).GetNormalized();		// halfway vector H
-				const float NdotH = std::max(0.0f, N % H);
-				const float specNorm = (glossiness + 2.0f) / (8.0f * Pi<float>());
-				const float specular = specNorm * std::pow(NdotH, glossiness);
-				color += ks * lightColor * specular;
-			}
+			Vec3f H = (L + V).GetNormalized();		// halfway vector H
+			const float NdotH = std::max(0.0f, N % H);
+			const float specNorm = (glossiness + 2.0f) / (8.0f * Pi<float>());
+			const float specular = specNorm * std::pow(NdotH, glossiness);
+			color += ks * lightColor * specular;
 		}
 	}
 
