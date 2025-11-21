@@ -2,7 +2,7 @@
 ///
 /// \file       viewport.cpp 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    11.0
+/// \version    12.0
 /// \date       October 5, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
@@ -26,6 +26,7 @@
 #include "lights.h"
 #include "materials.h"
 #include "texture.h"
+#include "photonmap.h"
 
 #ifdef USE_GLUT
 # ifdef __APPLE__
@@ -53,6 +54,8 @@ static const char *uiControlsString =
  "2     - Shows the rendered image.\n"
  "3     - Shows the z (depth) image.\n"
  "4     - Shows the sample count image.\n"
+ "5     - Shows the photon map (colors on/off).\n"
+ "6     - Shows the caustics photon map (colors on/off).\n"
  "Space - Starts/stops rendering.\n"
  "Esc   - Terminates software.\n"
  "Mouse Left Click - Writes the pixel information to the console.\n";
@@ -76,6 +79,8 @@ Renderer *theRenderer = nullptr;
 #define WINDOW_TITLE_IMAGE        WINDOW_TITLE " - Rendered Image"
 #define WINDOW_TITLE_Z            WINDOW_TITLE " - Z (Depth) Image"
 #define WINDOW_TITLE_SAMPLE_COUNT WINDOW_TITLE " - Sample Count"
+#define WINDOW_TITLE_PHOTONMAP    WINDOW_TITLE " - Photon Map"
+#define WINDOW_TITLE_CAUSTICSMAP  WINDOW_TITLE " - Caustics Photon Map"
 
 enum Mode {
 	MODE_READY,			// Ready to render
@@ -89,11 +94,14 @@ enum ViewMode
 	VIEWMODE_IMAGE,
 	VIEWMODE_Z,
 	VIEWMODE_SAMPLECOUNT,
+	VIEWMODE_PHOTONMAP,
+	VIEWMODE_CAUSTICSMAP,
 };
 
 enum MouseMode {
 	MOUSEMODE_NONE,
 	MOUSEMODE_DEBUG,
+	MOUSEMODE_ROTATE,
 };
 
 static Mode      mode      = MODE_READY;		// Rendering mode
@@ -103,6 +111,10 @@ static int       startTime;						// Start time of rendering
 static GLuint    viewTexture;
 static bool      closeWhenDone;
 static GLint     maxLights;
+
+static int mouseX=0, mouseY=0;
+static float viewAngle1=0, viewAngle2=0;
+static bool showPhotonColors=false;
 
 static int dofDrawCount = 0;
 static std::vector<Color>   dofImage;
@@ -249,6 +261,30 @@ void DrawNode( Node const *node )
 
 //-------------------------------------------------------------------------------
 
+void SetCameraTransform( bool dof )
+{
+	Camera &camera = theRenderer->GetCamera();
+
+	Vec3f p = camera.pos;
+	Vec3f t = camera.pos + camera.dir*camera.focaldist;
+	Vec3f u = camera.up;
+	if ( dof && camera.dof > 0 ) {
+		Vec3f v = camera.dir ^ camera.up;
+		float r = Sqrt(float(rand())/RAND_MAX)*camera.dof;
+		float a = Pi<float>() * 2.0f * float(rand())/RAND_MAX;
+		p += r*std::cos(a)*v + r*std::sin(a)*u;
+	}
+	gluLookAt( p.x, p.y, p.z,  t.x, t.y, t.z,  u.x, u.y, u.z );
+
+	if ( viewMode >= VIEWMODE_PHOTONMAP ) {
+		Vec3f x = (camera.dir ^ u).GetNormalized();
+		glRotatef( viewAngle1, x.x, x.y, x.z );
+		glRotatef( viewAngle2, u.x, u.y, u.z );
+	}
+}
+
+//-------------------------------------------------------------------------------
+
 void DrawScene( bool flipped=false )
 {
 	Scene &scene = theRenderer->GetScene();
@@ -308,16 +344,7 @@ void DrawScene( bool flipped=false )
 	glEnable( GL_DEPTH_TEST );
 
 	glPushMatrix();
-	Vec3f p = camera.pos;
-	Vec3f t = camera.pos + camera.dir*camera.focaldist;
-	Vec3f u = camera.up;
-	if ( camera.dof > 0 ) {
-		Vec3f v = camera.dir ^ camera.up;
-		float r = Sqrt(float(rand())/RAND_MAX)*camera.dof;
-		float a = Pi<float>() * 2.0f * float(rand())/RAND_MAX;
-		p += r*std::cos(a)*v + r*std::sin(a)*u;
-	}
-	gluLookAt( p.x, p.y, p.z,  t.x, t.y, t.z,  u.x, u.y, u.z );
+	SetCameraTransform(true);
 
 	int nLights = 1;
 	if ( scene.lights.size() > 0 ) {
@@ -345,9 +372,11 @@ void DrawScene( bool flipped=false )
 	glDisable( GL_LIGHTING );
 	glDisable( GL_TEXTURE_2D );
 
-	for ( Light const *light : scene.lights ) {
-		if ( light->IsRenderable() ) {
-			light->ViewportDisplay(nullptr);
+	if ( viewMode < VIEWMODE_PHOTONMAP ) {
+		for ( Light const *light : scene.lights ) {
+			if ( light->IsRenderable() ) {
+				light->ViewportDisplay(nullptr);
+			}
 		}
 	}
 
@@ -401,6 +430,50 @@ void DrawImage( void const *data, GLenum type, GLenum format )
 	glMatrixMode( GL_MODELVIEW );
 
 	glDisable(GL_TEXTURE_2D);
+}
+
+//-------------------------------------------------------------------------------
+
+void DrawPhotons()
+{
+	PhotonMap const *pmap = nullptr;
+	switch ( viewMode ) {
+		case VIEWMODE_PHOTONMAP:   pmap = theRenderer->GetPhotonMap  (); break;
+		case VIEWMODE_CAUSTICSMAP: pmap = theRenderer->GetCausticsMap(); break;
+	}
+	if ( !pmap ) return;
+
+	int n = pmap->NumPhotons();
+	if ( n > 0 ) {
+		glEnableClientState(GL_VERTEX_ARRAY);
+		glVertexPointer( 3, GL_FLOAT, sizeof(PhotonMap::PhotonData), pmap->GetPhotons() );
+		if ( showPhotonColors ) {
+			glEnableClientState(GL_COLOR_ARRAY);
+			glColorPointer( 3, GL_UNSIGNED_BYTE, sizeof(PhotonMap::PhotonData), &pmap->GetPhotons()->color );
+		}
+
+		glMatrixMode(GL_PROJECTION);
+		glPushMatrix();
+		Matrix4f m;
+		glGetFloatv(GL_PROJECTION_MATRIX,&m.cell[0]);
+		glLoadIdentity();
+		glTranslatef(0,0,-0.000001f);
+		glMultMatrixf(&m.cell[0]);
+		glMatrixMode(GL_MODELVIEW);
+		glPushMatrix();
+		SetCameraTransform(false);
+		glEnable( GL_DEPTH_TEST );
+		glColor3f(1,1,1);
+		glDrawArrays(GL_POINTS,0,n);
+		glDisable( GL_DEPTH_TEST );
+		glPopMatrix();
+		glMatrixMode(GL_PROJECTION);
+		glPopMatrix();
+		glMatrixMode(GL_MODELVIEW);
+
+		glDisableClientState(GL_VERTEX_ARRAY);
+		glDisableClientState(GL_COLOR_ARRAY);
+	}
 }
 
 //-------------------------------------------------------------------------------
@@ -479,6 +552,11 @@ void GlutDisplay()
 		renderImage.ComputeSampleCountImage();
 		DrawImage( renderImage.GetSampleCountImage(), GL_UNSIGNED_BYTE, GL_LUMINANCE );
 		break;
+	case VIEWMODE_PHOTONMAP:
+	case VIEWMODE_CAUSTICSMAP:
+		DrawScene();
+		DrawPhotons();
+		break;
 	}
 	if ( mode == MODE_RENDERING ) DrawRenderProgressBar();
 
@@ -493,19 +571,23 @@ void GlutIdle()
 
 	static int lastRenderedPixels = 0;
 	if ( mode == MODE_RENDERING ) {
-		int nrp = renderImage.GetNumRenderedPixels();
-		if ( lastRenderedPixels != nrp ) {
-			lastRenderedPixels = nrp;
-			if ( renderImage.IsRenderDone() ) {
-				if ( ! closeWhenDone ) mode = MODE_RENDER_DONE;
-				int endTime = (int) time(nullptr);
-				int t = endTime - startTime;
-				int h = t / 3600;
-				int m = (t % 3600) / 60;
-				int s = t % 60;
-				printf("\nRender time is %d:%02d:%02d.\n",h,m,s);
-			}
+		if ( viewMode >= VIEWMODE_PHOTONMAP ) {
 			glutPostRedisplay();
+		} else {
+			int nrp = renderImage.GetNumRenderedPixels();
+			if ( lastRenderedPixels != nrp ) {
+				lastRenderedPixels = nrp;
+				if ( renderImage.IsRenderDone() ) {
+					if ( ! closeWhenDone ) mode = MODE_RENDER_DONE;
+					int endTime = (int) time(nullptr);
+					int t = endTime - startTime;
+					int h = t / 3600;
+					int m = (t % 3600) / 60;
+					int s = t % 60;
+					printf("\nRender time is %d:%02d:%02d.\n",h,m,s);
+				}
+				glutPostRedisplay();
+			}
 		}
 		if ( closeWhenDone && !theRenderer->IsRendering() ) {
 			mode = MODE_RENDER_DONE;
@@ -566,6 +648,20 @@ void GlutKeyboard(unsigned char key, int x, int y)
 	case '4':
 		viewMode = VIEWMODE_SAMPLECOUNT;
 		glutSetWindowTitle(WINDOW_TITLE_SAMPLE_COUNT);
+		glutPostRedisplay();
+		break;
+	case '5':
+		showPhotonColors = viewMode == VIEWMODE_PHOTONMAP ? !showPhotonColors : false;
+		viewAngle1 = viewAngle2 = 0;
+		viewMode = VIEWMODE_PHOTONMAP;
+		glutSetWindowTitle(WINDOW_TITLE_PHOTONMAP);
+		glutPostRedisplay();
+		break;
+	case '6':
+		showPhotonColors = viewMode == VIEWMODE_CAUSTICSMAP ? !showPhotonColors : false;
+		viewAngle1 = viewAngle2 = 0;
+		viewMode = VIEWMODE_CAUSTICSMAP;
+		glutSetWindowTitle(WINDOW_TITLE_CAUSTICSMAP);
 		glutPostRedisplay();
 		break;
 	}
@@ -632,9 +728,15 @@ void GlutMouse(int button, int state, int x, int y)
 	} else {
 		switch ( button ) {
 			case GLUT_LEFT_BUTTON:
-				mouseMode = MOUSEMODE_DEBUG;
-				terminal_clear();
-				PrintPixelData(x,y);
+				if ( viewMode >= VIEWMODE_PHOTONMAP ) {
+					mouseMode = MOUSEMODE_ROTATE;
+					mouseX = x;
+					mouseY = y;
+				} else {
+					mouseMode = MOUSEMODE_DEBUG;
+					terminal_clear();
+					PrintPixelData(x,y);
+				}
 				break;
 		}
 	}
@@ -649,6 +751,13 @@ void GlutMotion(int x, int y)
 			terminal_goto(0,0);
 			PrintPixelData(x,y);
 			break;
+		case MOUSEMODE_ROTATE:
+			viewAngle1 -= 0.2f * ( mouseY - y );
+			viewAngle2 -= 0.2f * ( mouseX - x );
+			mouseX = x;
+			mouseY = y;
+			glutPostRedisplay();
+			break;
 	}
 }
 
@@ -659,9 +768,9 @@ void BeginRendering( int value )
 	Camera &camera = theRenderer->GetCamera();
 	RenderImage &renderImage = theRenderer->GetRenderImage();
 
+	ViewMode oldViewMode = viewMode;
 	mode = MODE_RENDERING;
 	viewMode = VIEWMODE_IMAGE;
-	glutSetWindowTitle(WINDOW_TITLE_IMAGE);
 	if ( dofImage.empty() ) {
 		DrawScene(true);
 		glReadPixels( 0, 0, renderImage.GetWidth(), renderImage.GetHeight(), GL_RGB, GL_UNSIGNED_BYTE, renderImage.GetPixels() );
@@ -673,6 +782,8 @@ void BeginRendering( int value )
 	startTime = (int) time(nullptr);
 	theRenderer->BeginRender();
 	closeWhenDone = value;
+	if ( oldViewMode >= VIEWMODE_PHOTONMAP ) viewMode = oldViewMode;
+	else glutSetWindowTitle(WINDOW_TITLE_IMAGE);
 }
 
 //-------------------------------------------------------------------------------

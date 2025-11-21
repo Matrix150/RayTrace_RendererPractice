@@ -149,3 +149,16 @@ bool PointLight::IntersectRay(Ray const& ray, HitInfo& hInfo, int hitSide) const
 
     return true;
 }
+
+void PointLight::RandomPhoton(RNG& rng, Ray& ray, Color& power) const
+{
+    float z = 2.0f * rng.RandomFloat() - 1.0f;
+    float phi = 2.0f * Pi<float>() * rng.RandomFloat();
+    float r = std::sqrt(std::max(0.0f, 1.0f - z * z));
+
+    Vec3f dir(r * std::cos(phi), r * std::sin(phi), z);
+    ray.p = position;
+    ray.dir = dir;
+
+    power = intensity;
+}

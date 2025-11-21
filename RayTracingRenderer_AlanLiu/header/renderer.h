@@ -2,7 +2,7 @@
 ///
 /// \file       renderer.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    10.0
+/// \version    12.0
 /// \date       October 25, 2025
 ///
 /// \brief Project source for CS 6620 - University of Utah.
@@ -23,6 +23,10 @@
 #include "rng.h"
 
 #include "lodepng.h"
+
+//-------------------------------------------------------------------------------
+
+class PhotonMap;
 
 //-------------------------------------------------------------------------------
 
@@ -98,10 +102,10 @@ private:
 
 //-------------------------------------------------------------------------------
 
-class ShadeInfo
+class SamplerInfo
 {
 public:
-	ShadeInfo( std::vector<Light*> const &lightList, TexturedColor const &environment, RNG &r ) : lights(lightList), env(environment), rng(r) {}
+	SamplerInfo( RNG &r ) : rng(r) {}
 
 	virtual Vec3f P () const { return hInfo.p; }	// returns the shading position
 	virtual Vec3f V () const { return -ray.dir; }	// returns the view vector
@@ -129,23 +133,6 @@ public:
 	virtual Color Eval( TexturedColor const &c ) const { return c.Eval(hInfo.uvw,hInfo.duvw); }	// evaluates the given texture at the shaded texture coordinates
 	virtual float Eval( TexturedFloat const &f ) const { return f.Eval(hInfo.uvw,hInfo.duvw); }	// evaluates the given texture at the shaded texture coordinates
 
-	virtual Color EvalEnvironment( Vec3f const &dir ) const { return env.EvalEnvironment(dir); };	// returns the environment color
-
-	virtual int          NumLights()       const { return (int)lights.size(); }	// returns the number of lights to be used during shading
-	virtual Light const* GetLight( int i ) const { return lights[i]; }			// returns the i^th light
-
-	virtual bool CanBounce() const { return false; }	// returns if an additional bounce is permitted
-
-	// Traces a shadow ray and returns the visibility
-	virtual float TraceShadowRay( Ray   const &ray, float t_max=BIGFLOAT ) const { return 1.0f; }
-	virtual float TraceShadowRay( Vec3f const &dir, float t_max=BIGFLOAT ) const { return TraceShadowRay(Ray(P(),dir),t_max); }
-
-	// Traces a ray and returns the shaded color at the hit point.
-	// It also sets t to the distance to the hit point, if a front is found.
-	// if a back hit is found, dist should be set to zero.
-	virtual Color TraceSecondaryRay( Ray   const &ray, float &dist, bool reflection=true ) const { dist=BIGFLOAT; return Color(0,0,0); }
-	virtual Color TraceSecondaryRay( Vec3f const &dir, float &dist, bool reflection=true ) const { return TraceSecondaryRay(Ray(P(),dir),dist,reflection); }
-
 	virtual float RandomFloat() const { return rng.RandomFloat(); }
 
 	void SetPixel( int x, int y ) { pixelX = x; pixelY = y; }
@@ -171,7 +158,39 @@ protected:
 	int     pSample = 0;	// current pixel sample
 
 	RNG &rng;	// random number generator
+};
 
+//-------------------------------------------------------------------------------
+
+class ShadeInfo : public SamplerInfo
+{
+public:
+	ShadeInfo( std::vector<Light*> const &lightList, TexturedColor const &environment, RNG &r ) : lights(lightList), env(environment), SamplerInfo(r) {}
+
+	virtual int          NumLights()       const { return (int)lights.size(); }	// returns the number of lights to be used during shading
+	virtual Light const* GetLight( int i ) const { return lights[i]; }			// returns the i^th light
+
+	virtual Color EvalEnvironment( Vec3f const &dir ) const { return env.EvalEnvironment(dir); };	// returns the environment color
+
+	virtual bool CanBounce() const { return false; }	// returns if an additional bounce is permitted
+
+	// Traces a shadow ray and returns the visibility
+	virtual float TraceShadowRay( Ray   const &ray, float t_max=BIGFLOAT ) const { return 1.0f; }
+	virtual float TraceShadowRay( Vec3f const &dir, float t_max=BIGFLOAT ) const { return TraceShadowRay(Ray(P(),dir),t_max); }
+
+	// Traces a ray and returns the shaded color at the hit point.
+	// It also sets t to the distance to the hit point, if a front is found.
+	// if a back hit is found, dist should be set to zero.
+	virtual Color TraceSecondaryRay( Ray   const &ray, float &dist, bool reflection=true ) const { dist=BIGFLOAT; return Color(0,0,0); }
+	virtual Color TraceSecondaryRay( Vec3f const &dir, float &dist, bool reflection=true ) const { return TraceSecondaryRay(Ray(P(),dir),dist,reflection); }
+
+	virtual bool SkipPhotonLightSpecular() const { return false; }
+
+	// Add by myself
+	virtual PhotonMap const* GetPhotonMap() const { return nullptr; }
+	virtual PhotonMap const* GetCausticsMap() const { return nullptr; }
+
+protected:
 	std::vector<Light*> const &lights;	// lights
 	TexturedColor       const &env;		// environment
 };
@@ -204,6 +223,9 @@ public:
 
 	virtual bool TraceRay      ( Ray const &ray, HitInfo &hInfo, int hitSide=HIT_FRONT_AND_BACK ) const { return false; }
 	virtual bool TraceShadowRay( Ray const &ray, float t_max,    int hitSide=HIT_FRONT_AND_BACK ) const { return false; }
+
+	virtual PhotonMap const * GetPhotonMap  () const { return nullptr; }
+	virtual PhotonMap const * GetCausticsMap() const { return nullptr; }
 };
 
 //-------------------------------------------------------------------------------

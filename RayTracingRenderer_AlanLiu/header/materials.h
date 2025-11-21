@@ -2,8 +2,8 @@
 ///
 /// \file       materials.h 
 /// \author     Cem Yuksel (www.cemyuksel.com)
-/// \version    11.0
-/// \date       September 19, 2025
+/// \version    12.0
+/// \date       October 25, 2025
 ///
 /// \brief Example source for CS 6620 - University of Utah.
 ///
@@ -44,8 +44,9 @@ public:
 	const TexturedColor& Reflection() const { return reflection; }
 	const TexturedColor& Refraction() const { return refraction; }
 
-	Color Absorption( int mtlID=0 ) const override { return absorption; }
-	float IOR       ( int mtlID=0 ) const override { return ior; }
+	Color Absorption     ( int mtlID=0 ) const override { return absorption; }
+	float IOR            ( int mtlID=0 ) const override { return ior; }
+	bool  IsPhotonSurface( int mtlID=0 ) const override { return diffuse.GetValue().Sum() > 0; }
 
 protected:
 	TexturedColor diffuse    = Color(0.5f);
@@ -65,6 +66,8 @@ class MtlPhong : public MtlBasePhongBlinn
 public:
 	Color Shade( ShadeInfo const &shadeInfo ) const override;
 	void SetViewportMaterial( int mtlID=0 ) const override;	// used for OpenGL display
+
+	bool GenerateSample( SamplerInfo const &sInfo, Vec3f &dir, Info &si ) const override;
 };
 
 //-------------------------------------------------------------------------------
@@ -74,6 +77,8 @@ class MtlBlinn : public MtlBasePhongBlinn
 public:
 	Color Shade( ShadeInfo const &shadeInfo ) const override;
 	void SetViewportMaterial ( int mtlID=0 ) const override;	// used for OpenGL display
+
+	bool GenerateSample( SamplerInfo const &sInfo, Vec3f &dir, Info &si ) const override;
 };
 
 //-------------------------------------------------------------------------------
@@ -100,7 +105,10 @@ public:
 	Color Shade( ShadeInfo const &shadeInfo ) const override;
 	Color Absorption         ( int mtlID=0 ) const override { return absorption; }
 	float IOR                ( int mtlID=0 ) const override { return ior;        }
+	bool  IsPhotonSurface    ( int mtlID=0 ) const override { return baseColor.GetValue().Sum() > 0; }
 	void  SetViewportMaterial( int mtlID=0 ) const override;	// used for OpenGL display
+
+	bool GenerateSample( SamplerInfo const &sInfo, Vec3f &dir, Info &si ) const override;
 
 private:
 	TexturedColor baseColor     = Color(0.5f);	// albedo for dielectrics, F0 for metals
@@ -122,9 +130,17 @@ public:
 	Color Shade( ShadeInfo const &sInfo ) const override { int m=sInfo.MaterialID(); return m<(int)mtls.size() ? mtls[m]->Shade(sInfo) : Color(1,1,1); }
 	Color Absorption         ( int mtlID=0 ) const override { return mtlID<(int)mtls.size() ? mtls[mtlID]->Absorption     (mtlID) : Material::Absorption     (mtlID); }
 	float IOR                ( int mtlID=0 ) const override { return mtlID<(int)mtls.size() ? mtls[mtlID]->IOR            (mtlID) : Material::IOR            (mtlID); }
+	bool  IsPhotonSurface    ( int mtlID=0 ) const override { return mtlID<(int)mtls.size() ? mtls[mtlID]->IsPhotonSurface(mtlID) : Material::IsPhotonSurface(mtlID); }
 	void  SetViewportMaterial( int mtlID=0 ) const override { if   ( mtlID<(int)mtls.size() ) mtls[mtlID]->SetViewportMaterial(); }
 
 	void AppendMaterial( Material *m ) { mtls.push_back(m); }
+
+	bool GenerateSample( SamplerInfo const &sInfo, Vec3f &dir, Info &si ) const override
+	{
+		int m = sInfo.MaterialID();
+		if ( m < (int)mtls.size() ) return mtls[m]->GenerateSample(sInfo,dir,si);
+		else return Material::GenerateSample(sInfo,dir,si);
+	}
 
 private:
 	std::vector<Material*> mtls;

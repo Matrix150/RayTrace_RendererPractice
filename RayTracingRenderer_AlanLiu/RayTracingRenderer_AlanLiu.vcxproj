@@ -30,6 +30,7 @@
     <ClInclude Include="header\lights.h" />
     <ClInclude Include="header\materials.h" />
     <ClInclude Include="header\objects.h" />
+    <ClInclude Include="header\photonmap.h" />
     <ClInclude Include="header\renderer.h" />
     <ClInclude Include="header\rng.h" />
     <ClInclude Include="header\scene.h" />

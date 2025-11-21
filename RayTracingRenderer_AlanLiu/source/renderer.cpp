@@ -3,6 +3,7 @@
 #include "renderer.h"
 #include "lights.h"
 #include "rng.h"
+#include "photonmap.h"
 
 
 // Transform from Color(0, 1) to Color24 (0, 255)
@@ -157,6 +158,17 @@ public:
 		++bounce; 
 	}
 
+	// PhotonMap
+	PhotonMap const* GetPhotonMap() const override
+	{
+		return rendererPtr ? rendererPtr->GetPhotonMap() : nullptr;
+	}
+
+	PhotonMap const* GetCausticsMap() const override
+	{
+		return rendererPtr ? rendererPtr->GetCausticsMap() : nullptr;
+	}
+
 private:
 	const Renderer* rendererPtr = nullptr;
 	int maxSpecularBounce = 5;		// Default bounces
@@ -225,14 +237,34 @@ public:
 	bool TraceRay(Ray const& ray, HitInfo& hInfo, int hitSide) const override;
 	bool TraceShadowRay(Ray const& ray, float t_max, int hitSide) const override;
 
+	// ShadeInfo get photonmap through myrenderer
+	PhotonMap const* GetPhotonMap() const override
+	{
+		return (usePhotonMap && photonMapBuilt && globalPhotonMap.NumPhotons() > 0) ? &globalPhotonMap : nullptr;
+	}
+
+	PhotonMap const* GetCausticsMap() const override
+	{
+		return nullptr;
+	}
+
 	friend class MyShadeInfo;
 
 private:
-	// threading state
+	// Threading State
 	std::vector<std::thread> workers;		// working threads
 	std::atomic<bool> cancel{ false };		// cancel mark
 	std::atomic<int> nextTile{ 0 };			// next tile index 
 	std::atomic<int> liveWorkers{ 0 };		// living threads number
+	// PhotonMap
+	PhotonMap globalPhotonMap;
+	bool photonMapBuilt = false;
+	bool usePhotonMap = false;
+	int numGlobalPhoton = 60000;
+	int maxPhotonBounce = 4;
+
+	void BuildPhotonMap();
+	void TracePhoton(RNG& rng, Ray ray, Color power);
 };
 
 
@@ -278,12 +310,120 @@ bool MyRenderer::TraceShadowRay(Ray const& ray, float t_max, int hitSide) const
 	return CastShadowRecursive(scene.rootNode, rayShadow, t_max, hitSide, kEps);
 }
 
+void MyRenderer::TracePhoton(RNG& rng, Ray ray, Color power)
+{
+	constexpr float kEps = 1e-4f;
+	for (int depth = 0; depth < maxPhotonBounce; ++depth)
+	{
+		HitInfo hInfo;
+		hInfo.Init();
+
+		if (!IntersectNodeRecursive(scene.rootNode, ray, hInfo, HIT_FRONT_AND_BACK))
+			break;
+
+		const Material* material = (hInfo.node ? hInfo.node->GetMaterial() : nullptr);
+		if (!material)
+			break;
+
+		Vec3f N = hInfo.N;
+		N.Normalize();
+		if (!hInfo.front)
+			N = -N;
+
+		if (material->IsPhotonSurface(hInfo.mtlID))
+			globalPhotonMap.AddPhoton(hInfo.p, -ray.dir, power);
+
+		float pCount = std::max(power.r, std::max(power.g, power.b));
+		pCount = std::min(pCount, 0.95f);
+		if (pCount < 0.0f)
+			break;
+		if (rng.RandomFloat() > pCount)
+			break;
+		power /= pCount;
+		power *= 0.8f;
+
+		float u1 = rng.RandomFloat();
+		float u2 = rng.RandomFloat();
+		float cosTheta = 1.0f - u1;
+		float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
+		float phi = 2.0f * Pi<float>() * u2;
+
+		Vec3f T, B;
+		Vec3f up = (std::fabs(N.z) < 0.999f) ? Vec3f(0.0f, 0.0f, 1.0f) : Vec3f(0.0f, 1.0f, 0.0f);
+		T = (up ^ N).GetNormalized();
+		B = (N ^ T).GetNormalized();
+
+		Vec3f wi = (T * (sinTheta * std::cos(phi)) + B * (sinTheta * std::sin(phi)) + N * cosTheta).GetNormalized();
+		ray.p = hInfo.p + wi * kEps;
+		ray.dir = wi;
+	}
+}
+
+void MyRenderer::BuildPhotonMap()
+{
+	photonMapBuilt = false;
+	globalPhotonMap.Clear();
+	if (!usePhotonMap)
+		return;
+
+	struct LightInfo
+	{
+		const Light* light;
+		float power;
+	};
+	std::vector<LightInfo> lightList;
+	float totalPower = 0.0f;
+
+	for (Light* L : scene.lights)
+	{
+		if (!L->IsPhotonSource())
+			continue;
+		Color I = L->Intensity();
+		float p = I.r + I.g + I.b;
+		if (p <= 0.0f)
+			continue;
+		lightList.push_back({ L,p });
+		totalPower += p;
+	}
+	if (lightList.empty() || totalPower <= 0.0f)
+		return;
+
+	globalPhotonMap.Resize(numGlobalPhoton);
+	RNG rng;
+
+	std::vector<float> cdf(lightList.size());
+	float acc = 0.0f;
+	for (size_t i = 0; i < lightList.size(); ++i)
+	{
+		acc += lightList[i].power;
+		cdf[i] = acc;
+	}
+	for (int i = 0; i < numGlobalPhoton; ++i)
+	{
+		float xi = rng.RandomFloat() * acc;
+		size_t index = 0;
+		while (index + 1 < cdf.size() && xi > cdf[index])
+			++index;
+
+		const Light* light = lightList[index].light;
+		Ray ray;
+		Color power;
+		light->RandomPhoton(rng, ray, power);
+		power *= (totalPower / (float)numGlobalPhoton);
+		TracePhoton(rng, ray, power);
+	}
+	globalPhotonMap.PrepareForIrradianceEstimation();
+	photonMapBuilt = (globalPhotonMap.NumPhotons() > 0);
+}
 
 void MyRenderer::BeginRender()
 {
 	if (isRendering)
 		return;
 	isRendering = true;
+
+	usePhotonMap = true;
+	BuildPhotonMap();
 
 	// Prepare render target
 	renderImage.Init(camera.imgWidth, camera.imgHeight);	// Initialize z-buffer to BIGFLOAT & reset rendered pixels
