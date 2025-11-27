@@ -12,7 +12,8 @@
 #define PHOTON_MODE PHOTON_MODE_INDIRECT_ONLY
 #endif
 
-static const float kPhotonRadius = 1.5f;
+static const float kPhotonRadius = 1.0f;
+static const float causticRadius = 0.5f;
 static const int kPhotonMaxPhoton = 20;
 
 
@@ -217,7 +218,7 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 			if (NdotL > 0.0f)
 			{
 				// Diffuse
-				color += kd * lightColor * (NdotL / Pi<float>());
+				color += kd * lightColor * NdotL / Pi<float>();
 				// Blinn-Phong specular
 				Vec3f H = (L + V).GetNormalized();		// halfway vector H
 				const float NdotH = std::max(0.0f, N % H);
@@ -233,16 +234,26 @@ Color MtlBlinn::Shade(ShadeInfo const& sInfo) const
 		PhotonMap const* pMap = sInfo.GetPhotonMap();
 		if (pMap)
 		{
-			Color irrad;
-			Vec3f dirDummy;
-			pMap->EstimateIrradiance<kPhotonMaxPhoton, PHOTONMAP_FILTER_QUADRATIC>(irrad, dirDummy, kPhotonRadius, P, N, 1.0f);
+			Color pIrrad(0.0f, 0.0f, 0.0f);
+			Vec3f dirDummyP;
+			pMap->EstimateIrradiance<kPhotonMaxPhoton, PHOTONMAP_FILTER_QUADRATIC>(pIrrad, dirDummyP, kPhotonRadius, P, N, 1.0f);
 			Color brdf = kd * (1.0f / Pi<float>());
-			color += brdf * irrad;
+			color += brdf * pIrrad;
+		}
+
+		PhotonMap const* cMap = sInfo.GetCausticsMap();
+		if (cMap)
+		{
+			Color cIrrad(0.0f, 0.0f, 0.0f);
+			Vec3f dirDummyC;
+			cMap->EstimateIrradiance<kPhotonMaxPhoton, PHOTONMAP_FILTER_QUADRATIC>(cIrrad, dirDummyC, causticRadius, P, N, 1.0f);
+			Color brdf = kd * (1.0f / Pi<float>());
+			color += brdf * cIrrad;
 		}
 	}
 
 	const bool canBounce = sInfo.CanBounce();
-	if (PHOTON_MODE == PHOTON_MODE_NONE || PHOTON_MODE == PHOTON_MODE_INDIRECT_ONLY)
+	if (PHOTON_MODE == PHOTON_MODE_NONE)
 	{
 		// Inderect diffuse Global Illumination (Monte Carlo)
 		if (canBounce && sInfo.CurrentBounce() <= 2)
@@ -407,95 +418,111 @@ Color MtlMicrofacet::Shade(ShadeInfo const& shadeInfo) const
 }
 
 
-// MtlPhong: 简单做一个 diffuse cosine-hemisphere 采样
 bool MtlPhong::GenerateSample(SamplerInfo const& sInfo, Vec3f& dir, Info& si) const
 {
-	// 法线
-	Vec3f N = sInfo.N().GetNormalized();
-
-	// 使用已有的 SampleHemisphereCosine 工具函数（在本文件前面定义过）
-	float u1 = sInfo.RandomFloat();
-	float u2 = sInfo.RandomFloat();
-	float pdf = 0.0f;
-	dir = SampleHemisphereCosine(N, u1, u2, pdf);
-
-	if (pdf <= 0.0f) {
-		si.SetVoid();
-		return false;
-	}
-
-	float cosTheta = std::max(0.0f, dir % N);
-	if (cosTheta <= 0.0f) {
-		si.SetVoid();
-		return false;
-	}
-
-	// Lambertian: f = kd / pi
-	Color kd = sInfo.Eval(Diffuse());
-	Color f = kd * (1.0f / Pi<float>());   // BRDF
-	si.mult = f * cosTheta;                // BRDF * geometry term
-	si.prob = pdf;
-	si.lobe = DirSampler::Lobe::DIFFUSE;
-	return true;
+	return false;
 }
 
 
-// MtlBlinn: 也先实现成简单的 diffuse 采样（足够通过作业 / 编译）
 bool MtlBlinn::GenerateSample(SamplerInfo const& sInfo, Vec3f& dir, Info& si) const
 {
+	Color diffuseTex = sInfo.Eval(Diffuse());
+	Color SpecularTex = sInfo.Eval(Specular());
+	Color kt = sInfo.Eval(Refraction());
+	float glossiness = sInfo.Eval(Glossiness());
+	si.prob = 1.0f;
+
+	float pTotal = diffuseTex.Max() + SpecularTex.Max() + kt.Max();
+	if (pTotal <= 0.0f)
+	{
+		si.SetVoid();
+		return false;
+	}
+
+	float pDiffuse = diffuseTex.Max();
+	float pSpecular = SpecularTex.Max();
+	float pRefraction = kt.Max();
+
+	if (pTotal > 1.0f)
+	{
+		pDiffuse /= pTotal;
+		pSpecular /= pTotal;
+		pRefraction /= pTotal;
+		pTotal = 1.0f;
+	}
+	else
+	{
+		// 0 < pTotal <= 1
+		float invTotal = 1.0f / pTotal;
+		pDiffuse *= invTotal;
+		pSpecular *= invTotal;
+		pRefraction *= invTotal;
+	}
+
+	if (sInfo.RandomFloat() > pTotal)
+	{
+		si.SetVoid();
+		return false;
+	}
+	si.prob *= pTotal;
+
+	float eps = sInfo.RandomFloat();
 	Vec3f N = sInfo.N().GetNormalized();
+	Vec3f V = sInfo.V().GetNormalized();
 
-	float u1 = sInfo.RandomFloat();
-	float u2 = sInfo.RandomFloat();
-	float pdf = 0.0f;
-	dir = SampleHemisphereCosine(N, u1, u2, pdf);
+	if (eps < pDiffuse)
+	{
+		float pdf;
+		dir = SampleHemisphereCosine(N, sInfo.RandomFloat(), sInfo.RandomFloat(), pdf);
+		if (pdf <= 0.0f)
+		{
+			si.SetVoid();
+			return false;
+		}
 
-	if (pdf <= 0.0f) {
-		si.SetVoid();
-		return false;
+		si.lobe = DirSampler::Lobe::DIFFUSE;
+		si.mult = diffuseTex;
+		si.prob *= pDiffuse;
+		return true;
 	}
+	else if (eps < pDiffuse + pSpecular)
+	{
+		Vec3f R = Reflect(V, N).GetNormalized();
+		float u1 = sInfo.RandomFloat();
+		float u2 = sInfo.RandomFloat();
+		dir = SampleAroundAxis(R, glossiness, u1, u2);
 
-	float cosTheta = std::max(0.0f, dir % N);
-	if (cosTheta <= 0.0f) {
-		si.SetVoid();
-		return false;
+		si.lobe = DirSampler::Lobe::SPECULAR;
+		si.mult = SpecularTex;
+		si.prob *= pSpecular;
+		return true;
 	}
-
-	Color kd = sInfo.Eval(Diffuse());
-	Color f = kd * (1.0f / Pi<float>());
-	si.mult = f * cosTheta;
-	si.prob = pdf;
-	si.lobe = DirSampler::Lobe::DIFFUSE;
-	return true;
+	else
+	{
+		Vec3f T;
+		float cosi, eta;
+		bool hasKt = Refract(V, N, sInfo.IsFront(), IOR(), T, cosi, eta);
+		si.prob *= pRefraction;
+		if (hasKt)
+		{
+			dir = T;
+			si.lobe = DirSampler::Lobe::TRANSMISSION;
+			si.mult = kt;
+			return true;
+		}
+		else 
+		{
+			Vec3f R = Reflect(V, N).GetNormalized();
+			dir = R;
+			si.lobe = DirSampler::Lobe::SPECULAR;
+			si.mult = Color::White();
+			return true;
+		}
+	}
 }
 
 
-// MtlMicrofacet: 先做成 diffuse 采样版本（避免链接错误，之後你可以改成真正的 microfacet 采样）
 bool MtlMicrofacet::GenerateSample(SamplerInfo const& sInfo, Vec3f& dir, Info& si) const
 {
-	Vec3f N = sInfo.N().GetNormalized();
-
-	float u1 = sInfo.RandomFloat();
-	float u2 = sInfo.RandomFloat();
-	float pdf = 0.0f;
-	dir = SampleHemisphereCosine(N, u1, u2, pdf);
-
-	if (pdf <= 0.0f) {
-		si.SetVoid();
-		return false;
-	}
-
-	float cosTheta = std::max(0.0f, dir % N);
-	if (cosTheta <= 0.0f) {
-		si.SetVoid();
-		return false;
-	}
-
-	// 用 baseColor 当 diffuse albedo
-	Color kd = sInfo.Eval(baseColor);
-	Color f = kd * (1.0f / Pi<float>());
-	si.mult = f * cosTheta;
-	si.prob = pdf;
-	si.lobe = DirSampler::Lobe::DIFFUSE;
-	return true;
+	return false;
 }

@@ -245,7 +245,7 @@ public:
 
 	PhotonMap const* GetCausticsMap() const override
 	{
-		return nullptr;
+		return (usePhotonMap && causticMapBuilt && causticPhotonMap.NumPhotons() > 0) ? &causticPhotonMap : nullptr;
 	}
 
 	friend class MyShadeInfo;
@@ -258,13 +258,16 @@ private:
 	std::atomic<int> liveWorkers{ 0 };		// living threads number
 	// PhotonMap
 	PhotonMap globalPhotonMap;
+	PhotonMap causticPhotonMap;
 	bool photonMapBuilt = false;
+	bool causticMapBuilt = false;
 	bool usePhotonMap = false;
-	int numGlobalPhoton = 60000;
-	int maxPhotonBounce = 4;
+	int numGlobalPhoton = 2000000;
+	int numCausticPhoton = 2000000;
+	int maxPhotonBounce = 6;
 
 	void BuildPhotonMap();
-	void TracePhoton(RNG& rng, Ray ray, Color power);
+	void TracePhoton(RNG& rng, Ray ray, Color power, int bounce = 0);
 };
 
 
@@ -310,11 +313,16 @@ bool MyRenderer::TraceShadowRay(Ray const& ray, float t_max, int hitSide) const
 	return CastShadowRecursive(scene.rootNode, rayShadow, t_max, hitSide, kEps);
 }
 
-void MyRenderer::TracePhoton(RNG& rng, Ray ray, Color power)
+void MyRenderer::TracePhoton(RNG& rng, Ray ray, Color power, int bounce)
 {
 	constexpr float kEps = 1e-4f;
-	for (int depth = 0; depth < maxPhotonBounce; ++depth)
+	bool inCaustic = false;
+
+	for (;;)
 	{
+		if (power.IsBlack())
+			return;
+
 		HitInfo hInfo;
 		hInfo.Init();
 
@@ -325,44 +333,53 @@ void MyRenderer::TracePhoton(RNG& rng, Ray ray, Color power)
 		if (!material)
 			break;
 
-		Vec3f N = hInfo.N;
-		N.Normalize();
-		if (!hInfo.front)
-			N = -N;
-
 		if (material->IsPhotonSurface(hInfo.mtlID))
-			globalPhotonMap.AddPhoton(hInfo.p, -ray.dir, power);
+		{
+			if (inCaustic)
+				causticPhotonMap.AddPhoton(hInfo.p, ray.dir, power);
+			else if (bounce > 0)
+				globalPhotonMap.AddPhoton(hInfo.p, ray.dir, power);
+		}
 
-		float pCount = std::max(power.r, std::max(power.g, power.b));
-		pCount = std::min(pCount, 0.95f);
-		if (pCount < 0.0f)
+		SamplerInfo sInfo(rng);
+		sInfo.SetHit(ray, hInfo);
+		Material::Info si;
+		Vec3f newDir;
+
+		if (!material->GenerateSample(sInfo, newDir, si))
+			return;
+
+		power *= si.mult;
+
+		switch (si.lobe)
+		{
+		case DirSampler::DIFFUSE:
+			inCaustic = false;
 			break;
-		if (rng.RandomFloat() > pCount)
+		case DirSampler::SPECULAR:
+		case DirSampler::TRANSMISSION:
+			inCaustic = true;
 			break;
-		power /= pCount;
-		power *= 0.8f;
+		default:
+			assert(false);
+			break;
+		}
 
-		float u1 = rng.RandomFloat();
-		float u2 = rng.RandomFloat();
-		float cosTheta = 1.0f - u1;
-		float sinTheta = std::sqrt(std::max(0.0f, 1.0f - cosTheta * cosTheta));
-		float phi = 2.0f * Pi<float>() * u2;
-
-		Vec3f T, B;
-		Vec3f up = (std::fabs(N.z) < 0.999f) ? Vec3f(0.0f, 0.0f, 1.0f) : Vec3f(0.0f, 1.0f, 0.0f);
-		T = (up ^ N).GetNormalized();
-		B = (N ^ T).GetNormalized();
-
-		Vec3f wi = (T * (sinTheta * std::cos(phi)) + B * (sinTheta * std::sin(phi)) + N * cosTheta).GetNormalized();
-		ray.p = hInfo.p + wi * kEps;
-		ray.dir = wi;
+		ray.p = hInfo.p + newDir * kEps;
+		ray.dir = newDir;
+		++bounce;
+		if (bounce >= maxPhotonBounce)
+			return;
 	}
 }
 
 void MyRenderer::BuildPhotonMap()
 {
 	photonMapBuilt = false;
+	causticMapBuilt = false;
 	globalPhotonMap.Clear();
+	causticPhotonMap.Clear();
+
 	if (!usePhotonMap)
 		return;
 
@@ -389,6 +406,7 @@ void MyRenderer::BuildPhotonMap()
 		return;
 
 	globalPhotonMap.Resize(numGlobalPhoton);
+	causticPhotonMap.Resize(numCausticPhoton);
 	RNG rng;
 
 	std::vector<float> cdf(lightList.size());
@@ -398,6 +416,10 @@ void MyRenderer::BuildPhotonMap()
 		acc += lightList[i].power;
 		cdf[i] = acc;
 	}
+
+	const float photonTotalPower = totalPower * Pi<float>();
+	const float	perPhotonTotalPower = photonTotalPower / static_cast<float>(numGlobalPhoton);
+
 	for (int i = 0; i < numGlobalPhoton; ++i)
 	{
 		float xi = rng.RandomFloat() * acc;
@@ -406,14 +428,22 @@ void MyRenderer::BuildPhotonMap()
 			++index;
 
 		const Light* light = lightList[index].light;
+
 		Ray ray;
-		Color power;
-		light->RandomPhoton(rng, ray, power);
-		power *= (totalPower / (float)numGlobalPhoton);
-		TracePhoton(rng, ray, power);
+		Color dummy;
+		light->RandomPhoton(rng, ray, dummy);
+		Color I = light->Intensity();
+		float p = lightList[index].power;
+		Color power(0.0f, 0.0f, 0.0f);
+		if (p > 0.0f)
+			power = I * (perPhotonTotalPower / p);
+		TracePhoton(rng, ray, power, 0);
 	}
 	globalPhotonMap.PrepareForIrradianceEstimation();
+	causticPhotonMap.PrepareForIrradianceEstimation();
+
 	photonMapBuilt = (globalPhotonMap.NumPhotons() > 0);
+	causticMapBuilt = (causticPhotonMap.NumPhotons() > 0);
 }
 
 void MyRenderer::BeginRender()
@@ -467,7 +497,7 @@ void MyRenderer::BeginRender()
 	workers.clear();
 	workers.reserve(T);
 
-	constexpr int maxSpecularBounce = 5;		// Set max bounce number
+	constexpr int maxSpecularBounce = 30;		// Set max bounce number
 
 	constexpr int sppMin = 4;		// sample per pixel
 	constexpr int sppMax = 64;
